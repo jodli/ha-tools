@@ -299,7 +299,7 @@ class DatabaseManager:
         query += " ORDER BY last_changed DESC"
 
         if limit:
-            query += " LIMIT $" + str(len(params) + 1))
+            query += " LIMIT $" + str(len(params) + 1)
             params.append(limit)
 
         return await self.execute_query(query, tuple(params))

@@ -1,0 +1,1 @@
+"""Test fixtures and sample data for ha-tools tests."""
