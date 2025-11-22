@@ -1,0 +1,153 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository Overview
+
+This is the `ha-tools` Python CLI - a lightweight, high-performance tool designed specifically for AI agents working with Home Assistant configurations. The project uses a hybrid REST API + direct database access approach to replace heavy MCP implementations with fast, targeted operations.
+
+## Core Architecture
+
+**3-Command Design**:
+
+- `ha-tools validate [--syntax-only]` - Configuration validation
+- `ha-tools entities [--search <pattern>] [--include <type>] [--history <timeframe>]` - Entity discovery and analysis
+- `ha-tools errors [--current] [--log <timeframe>] [--entity <pattern>]` - Runtime error diagnostics
+
+**Performance Strategy**:
+
+- Database access: 10-15x faster for history queries
+- Filesystem access: Package organization and YAML parsing
+- REST API fallback: Real-time state and validation
+
+## Development Commands
+
+```bash
+# Setup with uvx (modern Python package management)
+uvx --with <requirements> ha-tools setup
+
+# Or run directly with uvx
+uvx --from . ha-tools test-connection
+
+# Run validation
+uvx --from . ha-tools validate --syntax-only  # Quick syntax check
+uvx --from . ha-tools validate               # Full validation (2-3 min)
+
+# Entity discovery examples
+uvx --from . ha-tools entities                                       # Overview
+uvx --from . ha-tools entities --search "temp_*"                     # Find temperature sensors
+uvx --from . ha-tools entities --include history --history 7d       # With historical data
+uvx --from . ha-tools entities --include state --search "sensor.*"   # Full state details
+
+# Error diagnostics
+uvx --from . ha-tools errors --current                              # Current runtime errors
+uvx --from . ha-tools errors --log 24h --entity "heizung*"         # Entity-specific errors
+```
+
+## Implementation Structure
+
+```
+ha_tools/
+├── pyproject.toml      # Modern Python project configuration
+├── cli.py              # Main entry point and argument parsing
+├── commands/
+│   ├── __init__.py
+│   ├── validate.py     # Configuration validation logic
+│   ├── entities.py     # Entity discovery and analysis
+│   └── errors.py       # Error diagnostics
+├── lib/
+│   ├── __init__.py
+│   ├── database.py     # Async database connection and queries
+│   ├── registry.py     # Entity/area registry loading
+│   ├── rest_api.py     # Async Home Assistant REST API client
+│   └── output.py       # Markdown formatting utilities
+└── config.py           # Configuration management with pydantic
+```
+
+### Tech Stack
+
+- **uvx**: Modern Python package management and execution
+- **pyproject.toml**: Standard Python project configuration
+- **asyncio**: Async database and API operations for performance
+- **pydantic**: Type-safe configuration management
+- **rich**: Terminal formatting and progress indicators
+- **typer**: Modern CLI framework with automatic help generation
+
+## Key Patterns
+
+### Data Source Hierarchy
+
+1. **Database** (Primary): History, statistics, bulk operations
+2. **Filesystem** (Secondary): YAML parsing, package analysis
+3. **REST API** (Fallback): Real-time state, validation
+
+### Configuration Management
+
+- Location: `~/.ha-tools-config.yaml`
+- Database: Read-only access to MariaDB/PostgreSQL/SQLite
+- Home Assistant: URL + long-lived access token
+- Modern async/await patterns for database and API operations
+- Type hints throughout the codebase
+
+### Output Format
+
+All commands output structured markdown optimized for AI consumption:
+
+- Progressive disclosure (summary → detailed views)
+- Tables for entity listings
+- Code blocks for errors and configuration
+- Performance metrics and troubleshooting guidance
+
+### Registry Loading Patterns
+
+Use the established patterns from `ENTITY_EXPLORER_KNOWLEDGE_EXTRACTION.md`:
+
+- Entity registry: `.storage/core.entity_registry`
+- Area registry: `.storage/core.area_registry`
+- Graceful error handling with fallbacks
+
+## AI Agent Workflow Integration
+
+### Configuration Changes
+
+```bash
+# 1. Quick syntax check
+ha-tools validate --syntax-only
+
+# 2. Check affected entities
+ha-tools entities --search "modified_area*" --include state
+
+# 3. Full validation
+ha-tools validate
+
+# 4. Check for runtime issues
+ha-tools errors --current
+```
+
+### Debugging Existing Issues
+
+```bash
+# Analyze entity behavior
+ha-tools entities --search "heizung*" --include history --history 24h
+
+# Correlate with errors
+ha-tools errors --entity "heizung*" --log 24h
+
+# Check automation dependencies
+ha-tools entities --include relations --search "automation.heating*"
+```
+
+## Error Handling
+
+- Exit codes: 0 (success), 1 (general), 2 (validation), 3 (connection), 4 (database)
+- Graceful degradation: Database unavailable → REST API fallback
+- User-friendly error messages with troubleshooting steps
+
+## Extension Points
+
+The modular architecture supports future extensions:
+
+- Package operations: `ha-tools packages list|analyze`
+- Template validation: `ha-tools template validate <file>`
+- Advanced analytics: `ha-tools stats entity <id>`
+
