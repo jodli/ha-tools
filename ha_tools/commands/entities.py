@@ -1,0 +1,374 @@
+"""
+Entities command for ha-tools.
+
+Provides entity discovery and analysis with multi-source data aggregation.
+"""
+
+import asyncio
+import sys
+from datetime import datetime, timedelta
+from typing import Optional, List
+
+import typer
+from rich.console import Console
+
+from ..config import HaToolsConfig
+from ..lib.database import DatabaseManager
+from ..lib.rest_api import HomeAssistantAPI
+from ..lib.registry import RegistryManager
+from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp
+
+# Create the entities subcommand app
+app = typer.Typer(
+    name="entities",
+    help="Discover and analyze entities",
+    rich_markup_mode="rich",
+)
+
+console = Console()
+
+
+@app.command()
+def entities(
+    search: Optional[str] = typer.Option(
+        None,
+        "--search",
+        "-s",
+        help="Search pattern (supports wildcards like temp_*)"
+    ),
+    include: Optional[str] = typer.Option(
+        None,
+        "--include",
+        "-i",
+        help="Include additional data (state, history, relations)"
+    ),
+    history: Optional[str] = typer.Option(
+        None,
+        "--history",
+        "-h",
+        help="History timeframe (e.g., 24h, 7d, 1m) - requires database access"
+    ),
+    limit: Optional[int] = typer.Option(
+        100,
+        "--limit",
+        "-l",
+        help="Maximum number of entities to return"
+    ),
+    format: Optional[str] = typer.Option(
+        "markdown",
+        "--format",
+        "-f",
+        help="Output format (markdown, json, table)"
+    ),
+) -> None:
+    """
+    Discover and analyze Home Assistant entities.
+
+    Provides fast entity discovery with optional state, history, and relationship data.
+    Uses database access for 10-15x faster history queries.
+
+    Examples:
+        ha-tools entities
+        ha-tools entities --search "temp_*" --include history --history 24h
+        ha-tools entities --include state,relations
+        ha-tools entities --search "sensor.*" --format json
+    """
+    try:
+        exit_code = asyncio.run(_run_entities_command(search, include, history, limit, format))
+        sys.exit(exit_code)
+    except KeyboardInterrupt:
+        print_error("Entity discovery cancelled")
+        sys.exit(1)
+    except Exception as e:
+        print_error(f"Entity discovery failed: {e}")
+        sys.exit(1)
+
+
+async def _run_entities_command(search: Optional[str], include: Optional[str],
+                              history: Optional[str], limit: Optional[int],
+                              format: str) -> int:
+    """Run the entities discovery command."""
+    try:
+        config = HaToolsConfig.load()
+    except Exception as e:
+        print_error(f"Configuration error: {e}")
+        return 3
+
+    # Parse include options
+    include_options = _parse_include_options(include)
+
+    # Parse history timeframe
+    history_timeframe = None
+    if history:
+        history_timeframe = _parse_timeframe(history)
+
+    print_info("Discovering entities...")
+
+    async with DatabaseManager(config.database) as db:
+        async with HomeAssistantAPI(config.home_assistant) as api:
+            registry = RegistryManager(config)
+
+            # Load registry data
+            await registry.load_all_registries(api)
+
+            # Get entities
+            entities_data = await _get_entities(
+                registry, db, api, search, include_options, history_timeframe, limit
+            )
+
+            # Format and output results
+            await _output_results(entities_data, format, include_options)
+
+    return 0
+
+
+def _parse_include_options(include: Optional[str]) -> set[str]:
+    """Parse include options string."""
+    if not include:
+        return set()
+
+    options = set(opt.strip().lower() for opt in include.split(","))
+    valid_options = {"state", "history", "relations", "metadata"}
+
+    # Filter for valid options
+    return {opt for opt in options if opt in valid_options}
+
+
+def _parse_timeframe(timeframe: str) -> datetime:
+    """Parse timeframe string into datetime."""
+    timeframe = timeframe.lower().strip()
+
+    if timeframe.endswith("h"):
+        hours = int(timeframe[:-1])
+        return datetime.now() - timedelta(hours=hours)
+    elif timeframe.endswith("d"):
+        days = int(timeframe[:-1])
+        return datetime.now() - timedelta(days=days)
+    elif timeframe.endswith("m"):
+        minutes = int(timeframe[:-1])
+        return datetime.now() - timedelta(minutes=minutes)
+    elif timeframe.endswith("w"):
+        weeks = int(timeframe[:-1])
+        return datetime.now() - timedelta(weeks=weeks)
+    else:
+        raise ValueError(f"Invalid timeframe format: {timeframe}")
+
+
+async def _get_entities(registry: RegistryManager, db: DatabaseManager,
+                       api: HomeAssistantAPI, search: Optional[str],
+                       include_options: set[str], history_timeframe: Optional[datetime],
+                       limit: Optional[int]) -> List[dict]:
+    """Get entities data based on search criteria."""
+    entities_data = []
+
+    # Get entities from registry
+    if search:
+        # Search in registry
+        registry_entities = registry.search_entities(search)
+    else:
+        # Get all entities
+        registry_entities = registry._entity_registry or []
+
+    # Apply limit
+    if limit:
+        registry_entities = registry_entities[:limit]
+
+    print_info(f"Processing {len(registry_entities)} entities...")
+
+    for entity in registry_entities:
+        entity_id = entity["entity_id"]
+        entity_data = {
+            "entity_id": entity_id,
+            "friendly_name": entity.get("friendly_name"),
+            "domain": entity_id.split(".")[0],
+            "device_class": entity.get("device_class"),
+            "unit_of_measurement": entity.get("unit_of_measurement"),
+            "area_id": entity.get("area_id"),
+            "device_id": entity.get("device_id"),
+            "disabled_by": entity.get("disabled_by"),
+            "hidden_by": entity.get("hidden_by"),
+        }
+
+        # Add additional data based on include options
+        if "state" in include_options:
+            try:
+                state = await api.get_entity_state(entity_id)
+                if state:
+                    entity_data["current_state"] = state.get("state")
+                    entity_data["last_changed"] = state.get("last_changed")
+                    entity_data["last_updated"] = state.get("last_updated")
+                    entity_data["attributes"] = state.get("attributes", {})
+            except Exception:
+                pass  # Skip state if unavailable
+
+        if "history" in include_options and history_timeframe:
+            try:
+                history_records = await db.get_entity_states(
+                    entity_id, history_timeframe, None, 10
+                )
+                entity_data["history"] = history_records
+                entity_data["history_count"] = len(history_records)
+            except Exception:
+                pass  # Skip history if unavailable
+
+        if "relations" in include_options:
+            relations = {}
+            if entity_data.get("area_id"):
+                area_name = await registry.get_area_name(entity_data["area_id"])
+                relations["area"] = {
+                    "id": entity_data["area_id"],
+                    "name": area_name
+                }
+
+            if entity_data.get("device_id"):
+                device_info = registry.get_device_metadata(entity_data["device_id"])
+                relations["device"] = {
+                    "id": entity_data["device_id"],
+                    "name": device_info.get("name", "Unknown"),
+                    "manufacturer": device_info.get("manufacturer"),
+                    "model": device_info.get("model"),
+                }
+
+            entity_data["relations"] = relations
+
+        if "metadata" in include_options:
+            entity_data["full_metadata"] = entity
+
+        entities_data.append(entity_data)
+
+    return entities_data
+
+
+async def _output_results(entities_data: List[dict], format: str,
+                         include_options: set[str]) -> None:
+    """Output entities data in specified format."""
+    if format == "json":
+        import json
+        print(json.dumps(entities_data, indent=2, default=str))
+    elif format == "table":
+        _output_table_format(entities_data, include_options)
+    else:  # markdown (default)
+        _output_markdown_format(entities_data, include_options)
+
+
+def _output_table_format(entities_data: List[dict], include_options: set[str]) -> None:
+    """Output entities in table format."""
+    if not entities_data:
+        print("No entities found.")
+        return
+
+    # Prepare headers
+    headers = ["Entity ID", "Friendly Name", "Domain", "State"]
+    if "history" in include_options:
+        headers.append("History Count")
+
+    # Prepare rows
+    rows = []
+    for entity in entities_data:
+        row = [
+            entity["entity_id"],
+            entity["friendly_name"] or "N/A",
+            entity["domain"],
+            entity.get("current_state", "N/A"),
+        ]
+        if "history" in include_options:
+            row.append(str(entity.get("history_count", 0)))
+        rows.append(row)
+
+    # Use rich table for formatting
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    table = Table(title="Home Assistant Entities")
+    for header in headers:
+        table.add_column(header)
+
+    for row in rows:
+        table.add_row(*row)
+
+    console.print(table)
+
+
+def _output_markdown_format(entities_data: List[dict], include_options: set[str]) -> None:
+    """Output entities in markdown format."""
+    formatter = MarkdownFormatter(title="Entity Discovery Results")
+
+    if not entities_data:
+        formatter.add_section("No Entities Found", "No entities matched your search criteria.")
+        print(formatter.format())
+        return
+
+    # Summary
+    formatter.add_section(
+        "📊 Summary",
+        f"Found **{len(entities_data)}** entities"
+        f"{' with history data' if 'history' in include_options else ''}"
+        f"{' with current state' if 'state' in include_options else ''}"
+        f"{' with relations' if 'relations' in include_options else ''}"
+    )
+
+    # Entity table
+    headers = ["Entity ID", "Friendly Name", "Domain", "Device Class", "Unit"]
+    if "state" in include_options:
+        headers.append("Current State")
+    if "history" in include_options:
+        headers.append("History Count")
+
+    rows = []
+    for entity in entities_data:
+        row = [
+            entity["entity_id"],
+            entity["friendly_name"] or "N/A",
+            entity["domain"],
+            entity.get("device_class") or "N/A",
+            entity.get("unit_of_measurement") or "N/A",
+        ]
+        if "state" in include_options:
+            row.append(entity.get("current_state", "N/A"))
+        if "history" in include_options:
+            row.append(str(entity.get("history_count", 0)))
+        rows.append(row)
+
+    formatter.add_table(headers, rows, "Entity Overview")
+
+    # Detailed sections if requested
+    if include_options:
+        formatter.add_section("🔍 Detailed Information", "")
+
+        for entity in entities_data[:10]:  # Limit detailed output to first 10
+            entity_id = entity["entity_id"]
+            details = []
+
+            # Basic metadata
+            details.append(f"**Domain:** {entity['domain']}")
+            if entity.get("disabled_by"):
+                details.append(f"**Disabled:** {entity['disabled_by']}")
+            if entity.get("hidden_by"):
+                details.append(f"**Hidden:** {entity['hidden_by']}")
+
+            # State information
+            if "state" in include_options and "current_state" in entity:
+                details.append(f"**Current State:** {entity['current_state']}")
+                if entity.get("last_changed"):
+                    details.append(f"**Last Changed:** {format_timestamp(entity['last_changed'])}")
+
+            # History information
+            if "history" in include_options and "history_count" in entity:
+                details.append(f"**History Records:** {entity['history_count']}")
+
+            # Relations
+            if "relations" in include_options and "relations" in entity:
+                relations = entity["relations"]
+                if "area" in relations:
+                    details.append(f"**Area:** {relations['area']['name']}")
+                if "device" in relations:
+                    device = relations["device"]
+                    details.append(f"**Device:** {device['name']} ({device.get('manufacturer', 'Unknown')})")
+
+            formatter.add_section(entity_id, "\n".join(details))
+
+        if len(entities_data) > 10:
+            formatter.add_section("", f"... and {len(entities_data) - 10} more entities")
+
+    print(formatter.format())
