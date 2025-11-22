@@ -253,5 +253,5 @@ def show_config_example() -> None:
     }
 
     console.print("\n[bold]Example Configuration File[/bold]")
-    console.print(f"[dim]{config_path}[/dim]:\n")
+    console.print("[dim]~/.ha-tools-config.yaml[/dim]:\n")
     console.print(yaml.dump(example, default_flow_style=False))
