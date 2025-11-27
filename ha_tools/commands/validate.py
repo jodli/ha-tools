@@ -19,18 +19,10 @@ from ..lib.rest_api import HomeAssistantAPI
 from ..lib.output import MarkdownFormatter, print_error, print_success, print_info
 from .common import create_progress
 
-# Create the validate subcommand app
-app = typer.Typer(
-    name="validate",
-    help="Validate Home Assistant configuration",
-    rich_markup_mode="rich",
-)
-
 console = Console()
 
 
-@app.command()
-def validate(
+def validate_command(
     syntax_only: bool = typer.Option(
         False,
         "--syntax-only",

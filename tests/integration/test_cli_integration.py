@@ -12,9 +12,9 @@ import pytest
 from typer.testing import CliRunner
 
 from ha_tools.cli import app
-from ha_tools.commands.validate import _run_validation
-from ha_tools.commands.entities import _run_entities_command
-from ha_tools.commands.errors import _run_errors_command
+from ha_tools.commands.validate import validate_command, _run_validation
+from ha_tools.commands.entities import entities_command, _run_entities_command
+from ha_tools.commands.errors import errors_command, _run_errors_command
 
 
 class TestCLIIntegration:

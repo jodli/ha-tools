@@ -21,6 +21,7 @@ class DatabaseManager:
         self._engine = None
         self._connection_pool = None
         self._database_type = self._detect_database_type(config.url)
+        self._connection_error = None
 
     def _detect_database_type(self, url: str) -> str:
         """Detect database type from URL."""
@@ -35,12 +36,18 @@ class DatabaseManager:
 
     async def connect(self) -> None:
         """Establish database connection pool."""
-        if self._database_type == "sqlite":
-            await self._connect_sqlite()
-        elif self._database_type == "mysql":
-            await self._connect_mysql()
-        elif self._database_type == "postgresql":
-            await self._connect_postgresql()
+        try:
+            if self._database_type == "sqlite":
+                await self._connect_sqlite()
+            elif self._database_type == "mysql":
+                await self._connect_mysql()
+            elif self._database_type == "postgresql":
+                await self._connect_postgresql()
+        except Exception as e:
+            # Store the connection error for later handling
+            self._connection_error = e
+            # Don't raise the exception - allow graceful fallback
+            pass
 
     async def _connect_sqlite(self) -> None:
         """Connect to SQLite database."""
@@ -59,7 +66,6 @@ class DatabaseManager:
 
     async def _connect_mysql(self) -> None:
         """Connect to MySQL/MariaDB database."""
-        import aiomysql
         import asyncmy
 
         # Parse connection URL
@@ -142,8 +148,20 @@ class DatabaseManager:
             async with self._connection_pool.acquire() as conn:
                 yield conn
 
+    def is_connected(self) -> bool:
+        """Check if database connection is available."""
+        return (self._connection_pool is not None or
+                (self._engine is not None)) and self._connection_error is None
+
+    def get_connection_error(self) -> Optional[Exception]:
+        """Get the connection error if any."""
+        return self._connection_error
+
     async def test_connection(self) -> None:
         """Test database connectivity."""
+        if not self.is_connected():
+            raise self._connection_error or Exception("Database not connected")
+
         async with self.get_connection() as conn:
             if self._database_type == "sqlite":
                 await conn.execute("SELECT 1")
@@ -154,6 +172,10 @@ class DatabaseManager:
 
     async def execute_query(self, query: str, params: Optional[Tuple] = None) -> List[Dict[str, Any]]:
         """Execute a query and return results as list of dictionaries."""
+        if not self.is_connected():
+            # Return empty result when database is not available
+            return []
+
         async with self.get_connection() as conn:
             if self._database_type == "sqlite":
                 cursor = await conn.execute(query, params or ())
@@ -180,6 +202,10 @@ class DatabaseManager:
         This is the core method for fast history queries, achieving 10-15x
         performance improvement over REST API.
         """
+        if not self.is_connected():
+            # Return empty result when database is not available
+            return []
+
         if self._database_type == "sqlite":
             return await self._get_entity_states_sqlite(entity_id, start_time, end_time, limit)
         elif self._database_type == "mysql":
@@ -308,6 +334,10 @@ class DatabaseManager:
                                    statistic_type: Optional[str] = None,
                                    period: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get long-term statistics data from database."""
+        if not self.is_connected():
+            # Return empty result when database is not available
+            return []
+
         if self._database_type == "sqlite":
             return await self._get_statistics_sqlite(entity_id, statistic_type, period)
         elif self._database_type == "mysql":
@@ -415,7 +445,15 @@ class DatabaseManager:
         if self._database_type == "sqlite" and self._engine:
             await self._engine.close()
         elif self._connection_pool:
-            await self._connection_pool.close()
+            # Different database drivers have different close() methods
+            close_method = getattr(self._connection_pool, 'close', None)
+            if close_method:
+                try:
+                    # Try async close first
+                    await close_method()
+                except TypeError:
+                    # If close() is not async, call it directly
+                    close_method()
 
     async def __aenter__(self):
         """Async context manager entry."""

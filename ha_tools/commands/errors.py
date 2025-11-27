@@ -20,18 +20,10 @@ from ..lib.rest_api import HomeAssistantAPI
 from ..lib.registry import RegistryManager
 from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp
 
-# Create the errors subcommand app
-app = typer.Typer(
-    name="errors",
-    help="Analyze runtime errors",
-    rich_markup_mode="rich",
-)
-
 console = Console()
 
 
-@app.command()
-def errors(
+def errors_command(
     current: bool = typer.Option(
         False,
         "--current",
@@ -109,12 +101,21 @@ async def _run_errors_command(current: bool, log: Optional[str], entity: Optiona
 
     print_info("Analyzing errors...")
 
-    async with DatabaseManager(config.database) as db:
-        async with HomeAssistantAPI(config.home_assistant) as api:
+    # Initialize database manager - may fail gracefully
+    db_manager = DatabaseManager(config.database)
+    api_manager = HomeAssistantAPI(config.home_assistant)
+
+    async with db_manager as db:
+        async with api_manager as api:
             registry = RegistryManager(config)
 
+            # Check database availability and notify if not connected
+            if not db.is_connected():
+                print_info(f"⚠️  Database unavailable: {db.get_connection_error()}")
+                print_info("ℹ️  Using API-only mode (limited functionality)")
+
             # Load registry for correlation analysis
-            if correlation:
+            if correlation and db.is_connected():
                 await registry.load_all_registries(api)
 
             # Collect errors from different sources

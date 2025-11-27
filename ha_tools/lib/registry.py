@@ -136,16 +136,18 @@ class RegistryManager:
         entity_registry = await self.load_entity_registry(fallback_api)
 
         for entity in entity_registry:
-            entity_id = entity["entity_id"]
-            # Use friendly_name if available, otherwise generate from entity_id
-            friendly_name = entity.get("friendly_name")
-            if friendly_name:
-                self._entity_id_to_name[entity_id] = friendly_name
-            else:
-                # Generate human-readable name from entity_id
-                domain, object_id = entity_id.split(".", 1)
-                name = object_id.replace("_", " ").title()
-                self._entity_id_to_name[entity_id] = name
+            entity_id = entity.get("entity_id")
+            if entity_id:  # Only process if entity_id exists
+                # Use friendly_name if available, otherwise generate from entity_id
+                friendly_name = entity.get("friendly_name")
+                if friendly_name:
+                    self._entity_id_to_name[entity_id] = friendly_name
+                else:
+                    # Generate human-readable name from entity_id
+                    if "." in entity_id:
+                        domain, object_id = entity_id.split(".", 1)
+                        name = object_id.replace("_", " ").title()
+                        self._entity_id_to_name[entity_id] = name
 
     async def _build_area_mappings(self, fallback_api: Optional[Any] = None) -> None:
         """Build area ID to name mappings."""
@@ -153,9 +155,10 @@ class RegistryManager:
         area_registry = await self.load_area_registry(fallback_api)
 
         for area in area_registry:
-            area_id = area["area_id"]
-            name = area.get("name", area_id)
-            self._area_id_to_name[area_id] = name
+            area_id = area.get("area_id")
+            if area_id:  # Only process if area_id exists
+                name = area.get("name", area_id)
+                self._area_id_to_name[area_id] = name
 
     def get_entities_by_domain(self, domain: str) -> List[Dict[str, Any]]:
         """Get all entities for a specific domain."""
@@ -234,7 +237,8 @@ class RegistryManager:
             return {}
 
         for area in self._area_registry:
-            if area["area_id"] == area_id:
+            # Safely check if area has area_id key and compare
+            if area.get("area_id") == area_id:
                 return area
 
         return {}
@@ -245,7 +249,8 @@ class RegistryManager:
             return {}
 
         for device in self._device_registry:
-            if device["device_id"] == device_id:
+            # Safely check if device has device_id key and compare
+            if device.get("device_id") == device_id:
                 return device
 
         return {}
