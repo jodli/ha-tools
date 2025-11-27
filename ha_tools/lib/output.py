@@ -26,7 +26,7 @@ def print_success(message: str) -> None:
 
 def print_error(message: str) -> None:
     """Print an error message."""
-    console.print(f"[red]✗ {message}[/red]", file=sys.stderr)
+    console.print(f"[red]✗ {message}[/red]")
 
 
 def print_warning(message: str) -> None:

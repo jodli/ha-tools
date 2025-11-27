@@ -11,6 +11,9 @@ from typing import Any, Dict, Optional, Union
 from pydantic import BaseModel, Field, validator
 from pydantic_settings import BaseSettings
 
+# Module-level variable for custom config path
+_custom_config_path: Optional[Path] = None
+
 
 class DatabaseConfig(BaseModel):
     """Database connection configuration."""
@@ -81,9 +84,7 @@ class HaToolsConfig(BaseSettings):
     )
     verbose: bool = Field(default=False, description="Enable verbose logging")
 
-    # Custom settings path
-    _config_path: Optional[Path] = None
-
+    
     class Config:
         env_prefix = "HA_TOOLS_"
         env_file = ".env"
@@ -92,13 +93,15 @@ class HaToolsConfig(BaseSettings):
     @classmethod
     def set_config_path(cls, path: Union[str, Path]) -> None:
         """Set custom configuration file path."""
-        cls._config_path = Path(path)
+        global _custom_config_path
+        _custom_config_path = Path(path)
 
     @classmethod
     def get_config_path(cls) -> Path:
         """Get the configuration file path."""
-        if cls._config_path:
-            return cls._config_path
+        global _custom_config_path
+        if _custom_config_path:
+            return _custom_config_path
 
         # Default to ~/.ha-tools-config.yaml
         return Path.home() / ".ha-tools-config.yaml"

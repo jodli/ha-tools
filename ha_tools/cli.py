@@ -12,6 +12,7 @@ from typing import Optional
 
 import typer
 from rich import console
+from typer import Context
 
 from . import __version__
 from .commands import validate, entities, errors
@@ -20,37 +21,13 @@ from .lib.output import print_error, print_success
 
 # Create the main typer app
 app = typer.Typer(
-    name="ha-tools",
     help="High-performance CLI for AI agents working with Home Assistant configurations",
-    no_args_is_help=True,
     rich_markup_mode="rich",
+    invoke_without_command=True,
 )
-
-# Add subcommands
-app.add_typer(validate.app, name="validate", help="Validate Home Assistant configuration")
-app.add_typer(entities.app, name="entities", help="Discover and analyze entities")
-app.add_typer(errors.app, name="errors", help="Analyze runtime errors")
-
-console = console.Console()
-
-
-def version_callback(value: bool) -> None:
-    """Print version information and exit."""
-    if value:
-        typer.echo(f"ha-tools {__version__}")
-        raise typer.Exit()
-
 
 @app.callback()
 def main(
-    version: Optional[bool] = typer.Option(
-        None,
-        "--version",
-        "-v",
-        callback=version_callback,
-        is_eager=True,
-        help="Show version and exit",
-    ),
     config: Optional[str] = typer.Option(
         None,
         "--config",
@@ -75,8 +52,25 @@ def main(
         ha-tools errors --current --log 24h
     """
     # Store global configuration for subcommands
-    if config:
+    if config is not None:
         HaToolsConfig.set_config_path(config)
+
+# Import and add commands directly
+from .commands.validate import validate_command
+from .commands.entities import entities_command
+from .commands.errors import errors_command
+
+app.command(name="validate")(validate_command)
+app.command(name="entities")(entities_command)
+app.command(name="errors")(errors_command)
+
+console = console.Console()
+
+
+@app.command()
+def version() -> None:
+    """Show version and exit."""
+    typer.echo(f"ha-tools {__version__}")
 
 
 @app.command()
@@ -102,7 +96,9 @@ def test_connection() -> None:
             # Test database connection
             from .lib.database import DatabaseManager
             db = DatabaseManager(config.database)
+            await db.connect()
             await db.test_connection()
+            await db.close()
 
             # Test REST API connection
             from .lib.rest_api import HomeAssistantAPI
@@ -122,7 +118,8 @@ def test_connection() -> None:
         raise typer.Exit(1)
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Main entry point for the CLI."""
     try:
         app()
     except KeyboardInterrupt:
@@ -131,3 +128,7 @@ if __name__ == "__main__":
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

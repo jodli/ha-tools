@@ -18,18 +18,10 @@ from ..lib.rest_api import HomeAssistantAPI
 from ..lib.registry import RegistryManager
 from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp
 
-# Create the entities subcommand app
-app = typer.Typer(
-    name="entities",
-    help="Discover and analyze entities",
-    rich_markup_mode="rich",
-)
-
 console = Console()
 
 
-@app.command()
-def entities(
+def entities_command(
     search: Optional[str] = typer.Option(
         None,
         "--search",
