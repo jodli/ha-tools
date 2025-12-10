@@ -39,6 +39,11 @@ def main(
         "--verbose",
         help="Enable verbose output",
     ),
+    version: bool = typer.Option(
+        False,
+        "--version",
+        help="Show version and exit",
+    ),
 ) -> None:
     """
     High-performance CLI for AI agents working with Home Assistant configurations.
@@ -51,6 +56,11 @@ def main(
         ha-tools entities --search "temp_*" --include history
         ha-tools errors --current --log 24h
     """
+    # Handle version flag
+    if version:
+        typer.echo(f"ha-tools {__version__}")
+        raise typer.Exit()
+
     # Store global configuration for subcommands
     if config is not None:
         HaToolsConfig.set_config_path(config)
@@ -102,8 +112,8 @@ def test_connection() -> None:
 
             # Test REST API connection
             from .lib.rest_api import HomeAssistantAPI
-            api = HomeAssistantAPI(config.home_assistant)
-            await api.test_connection()
+            async with HomeAssistantAPI(config.home_assistant) as api:
+                await api.test_connection()
 
             print_success("✓ All connections test successful!")
 

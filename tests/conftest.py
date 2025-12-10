@@ -5,7 +5,6 @@ Provides common fixtures for testing CLI commands, database connections,
 and Home Assistant API interactions.
 """
 
-import asyncio
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, Generator, Optional
@@ -163,6 +162,10 @@ def mock_database_manager():
     """Create a mock database manager."""
     db = AsyncMock()
 
+    # Mock synchronous methods with MagicMock to avoid unawaited coroutines
+    db.is_connected = MagicMock(return_value=True)
+    db.get_connection_error = MagicMock(return_value=None)
+
     # Mock common database responses
     db.test_connection.return_value = None
 
@@ -190,9 +193,16 @@ def mock_database_manager():
 
 
 @pytest.fixture
-def mock_registry_manager():
+def mock_registry_manager(temp_dir: Path):
     """Create a mock registry manager."""
-    registry = AsyncMock()
+    from ha_tools.lib.registry import RegistryManager
+
+    # Use regular MagicMock for the base
+    registry = MagicMock(spec=RegistryManager)
+
+    # Mock config attribute (needed by errors command)
+    registry.config = MagicMock()
+    registry.config.ha_config_path = str(temp_dir)
 
     # Mock registry data
     registry._entity_registry = [
@@ -228,14 +238,21 @@ def mock_registry_manager():
         }
     }
 
-    registry.search_entities.return_value = registry._entity_registry
-    registry.get_area_name.return_value = "Test Area"
-    registry.get_entity_name.return_value = "Test Temperature"
-    registry.get_device_metadata.return_value = {
+    # Synchronous methods should return values directly (not coroutines)
+    registry.search_entities = MagicMock(return_value=registry._entity_registry)
+    registry.get_device_metadata = MagicMock(return_value={
         "name": "Test Device",
         "manufacturer": "Test Manufacturer",
         "model": "Test Model"
-    }
+    })
+    registry.get_entity_name = MagicMock(return_value="Test Temperature")
+    registry.get_area_name = MagicMock(return_value="Test Area")
+
+    # Async methods need AsyncMock
+    registry.load_all_registries = AsyncMock(return_value=None)
+    registry.load_entity_registry = AsyncMock(return_value=None)
+    registry.load_area_registry = AsyncMock(return_value=None)
+    registry.load_device_registry = AsyncMock(return_value=None)
 
     return registry
 
@@ -263,14 +280,6 @@ Entity not found: automation.heating_control
         f.write(log_content.strip())
 
     return log_file
-
-
-@pytest.fixture
-async def async_loop():
-    """Create an event loop for async tests."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 # Test data constants

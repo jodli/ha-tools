@@ -23,25 +23,22 @@ This is the `ha-tools` Python CLI - a lightweight, high-performance tool designe
 ## Development Commands
 
 ```bash
-# Setup with uvx (modern Python package management)
-uvx --with <requirements> ha-tools setup
-
-# Or run directly with uvx
-uvx --from . ha-tools test-connection
+# Setup with uv (modern Python package management)
+uv run ha-tools setup
 
 # Run validation
-uvx --from . ha-tools validate --syntax-only  # Quick syntax check
-uvx --from . ha-tools validate               # Full validation (2-3 min)
+uv run ha-tools validate --syntax-only  # Quick syntax check
+uv run ha-tools validate               # Full validation (2-3 min)
 
 # Entity discovery examples
-uvx --from . ha-tools entities                                       # Overview
-uvx --from . ha-tools entities --search "temp_*"                     # Find temperature sensors
-uvx --from . ha-tools entities --include history --history 7d       # With historical data
-uvx --from . ha-tools entities --include state --search "sensor.*"   # Full state details
+uv run ha-tools entities                                       # Overview
+uv run ha-tools entities --search "temp_*"                     # Find temperature sensors
+uv run ha-tools entities --include history --history 7d       # With historical data
+uv run ha-tools entities --include state --search "sensor.*"   # Full state details
 
 # Error diagnostics
-uvx --from . ha-tools errors --current                              # Current runtime errors
-uvx --from . ha-tools errors --log 24h --entity "heizung*"         # Entity-specific errors
+uv run ha-tools errors --current                              # Current runtime errors
+uv run ha-tools errors --log 24h --entity "heizung*"         # Entity-specific errors
 ```
 
 ## Implementation Structure
@@ -66,7 +63,7 @@ ha_tools/
 
 ### Tech Stack
 
-- **uvx**: Modern Python package management and execution
+- **uv**: Modern Python package management and execution
 - **pyproject.toml**: Standard Python project configuration
 - **asyncio**: Async database and API operations for performance
 - **pydantic**: Type-safe configuration management
@@ -112,29 +109,29 @@ Use the established patterns from `ENTITY_EXPLORER_KNOWLEDGE_EXTRACTION.md`:
 
 ```bash
 # 1. Quick syntax check
-ha-tools validate --syntax-only
+uv run ha-tools validate --syntax-only
 
 # 2. Check affected entities
-ha-tools entities --search "modified_area*" --include state
+uv run ha-tools entities --search "modified_area*" --include state
 
 # 3. Full validation
-ha-tools validate
+uv run ha-tools validate
 
 # 4. Check for runtime issues
-ha-tools errors --current
+uv run ha-tools errors --current
 ```
 
 ### Debugging Existing Issues
 
 ```bash
 # Analyze entity behavior
-ha-tools entities --search "heizung*" --include history --history 24h
+uv run ha-tools entities --search "heizung*" --include history --history 24h
 
 # Correlate with errors
-ha-tools errors --entity "heizung*" --log 24h
+uv run ha-tools errors --log 24h --entity "heizung*"
 
 # Check automation dependencies
-ha-tools entities --include relations --search "automation.heating*"
+uv run ha-tools entities --include relations --search "automation.heating*"
 ```
 
 ## Error Handling

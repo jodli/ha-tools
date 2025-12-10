@@ -7,7 +7,7 @@ Tests end-to-end command execution with mocked external dependencies.
 import asyncio
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
 import pytest
 from typer.testing import CliRunner
 
@@ -69,7 +69,7 @@ class TestCLIIntegration:
         import ha_tools.config
         ha_tools.config.HaToolsConfig.set_config_path(sample_config_file)
 
-        with patch('ha_tools.lib.rest_api.HomeAssistantAPI') as mock_api_class:
+        with patch('ha_tools.commands.validate.HomeAssistantAPI') as mock_api_class:
             # Mock successful API validation
             mock_api = AsyncMock()
             mock_api.validate_config.return_value = {
@@ -90,9 +90,15 @@ class TestCLIIntegration:
     @pytest.mark.asyncio
     async def test_entities_integration_success(self, test_config, mock_home_assistant_api, mock_database_manager, mock_registry_manager):
         """Test full entities command integration."""
-        with patch('ha_tools.commands.entities.DatabaseManager', mock_database_manager.__class__), \
-             patch('ha_tools.commands.entities.HomeAssistantAPI', mock_home_assistant_api.__class__), \
+        with patch('ha_tools.commands.entities.DatabaseManager') as mock_db_class, \
+             patch('ha_tools.commands.entities.HomeAssistantAPI') as mock_api_class, \
              patch('ha_tools.commands.entities.RegistryManager') as mock_registry_class:
+
+            # Setup async context manager mocks
+            mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_database_manager)
+            mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_api_class.return_value.__aenter__ = AsyncMock(return_value=mock_home_assistant_api)
+            mock_api_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_registry_class.return_value = mock_registry_manager
 
@@ -122,9 +128,15 @@ class TestCLIIntegration:
         # Update config to point to sample log
         test_config.ha_config_path = str(sample_log_file.parent)
 
-        with patch('ha_tools.commands.errors.DatabaseManager', mock_database_manager.__class__), \
-             patch('ha_tools.commands.errors.HomeAssistantAPI', mock_home_assistant_api.__class__), \
+        with patch('ha_tools.commands.errors.DatabaseManager') as mock_db_class, \
+             patch('ha_tools.commands.errors.HomeAssistantAPI') as mock_api_class, \
              patch('ha_tools.commands.errors.RegistryManager') as mock_registry_class:
+
+            # Setup async context manager mocks with properly configured fixtures
+            mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_database_manager)
+            mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_api_class.return_value.__aenter__ = AsyncMock(return_value=mock_home_assistant_api)
+            mock_api_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_registry_class.return_value = mock_registry_manager
 
@@ -170,12 +182,14 @@ class TestCLIIntegration:
 
             # Mock successful connections
             mock_db = AsyncMock()
-            mock_db.test_connection.return_value = None
-            mock_db_class.return_value.__aenter__.return_value = mock_db
+            mock_db.connect = AsyncMock()
+            mock_db.test_connection = AsyncMock()
+            mock_db.close = AsyncMock()
+            mock_db_class.return_value = mock_db
 
             mock_api = AsyncMock()
-            mock_api.test_connection.return_value = None
-            mock_api_class.return_value.__aenter__.return_value = mock_api
+            mock_api.test_connection = AsyncMock()
+            mock_api_class.return_value = mock_api
 
             result = self.runner.invoke(app, ["test-connection"])
             assert result.exit_code == 0
@@ -241,9 +255,15 @@ class TestCLIIntegration:
             }
         ]
 
-        with patch('ha_tools.commands.entities.DatabaseManager', mock_database_manager.__class__), \
-             patch('ha_tools.commands.entities.HomeAssistantAPI', mock_home_assistant_api.__class__), \
+        with patch('ha_tools.commands.entities.DatabaseManager') as mock_db_class, \
+             patch('ha_tools.commands.entities.HomeAssistantAPI') as mock_api_class, \
              patch('ha_tools.commands.entities.RegistryManager') as mock_registry_class:
+
+            # Setup async context manager mocks
+            mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_database_manager)
+            mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_api_class.return_value.__aenter__ = AsyncMock(return_value=mock_home_assistant_api)
+            mock_api_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_registry_class.return_value = mock_registry_manager
 
@@ -287,7 +307,8 @@ class TestEndToEndWorkflows:
         import ha_tools.config
         ha_tools.config.HaToolsConfig.set_config_path(sample_config_file)
 
-        with patch('ha_tools.lib.rest_api.HomeAssistantAPI') as mock_api_class:
+        # Patch where HomeAssistantAPI is used (in validate module)
+        with patch('ha_tools.commands.validate.HomeAssistantAPI') as mock_api_class:
             # Mock API responses
             mock_api = AsyncMock()
             mock_api.validate_config.return_value = {
@@ -296,6 +317,7 @@ class TestEndToEndWorkflows:
                 "messages": []
             }
             mock_api_class.return_value.__aenter__.return_value = mock_api
+            mock_api_class.return_value.__aexit__.return_value = None
 
             # Step 1: Quick syntax validation
             result = await _run_validation(syntax_only=True, fix=False)
@@ -308,8 +330,18 @@ class TestEndToEndWorkflows:
                  patch('ha_tools.commands.entities.RegistryManager') as mock_registry_class:
 
                 mock_db = AsyncMock()
-                mock_db_class.return_value.__aenter__.return_value = mock_db
-                mock_registry_class.return_value = MagicMock()
+                # Mock sync methods to avoid unawaited coroutines
+                mock_db.is_connected = MagicMock(return_value=True)
+                mock_db.get_connection_error = MagicMock(return_value=None)
+                mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+                mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+
+                # Create a mock registry with async support
+                mock_registry = AsyncMock()
+                mock_registry.load_all_registries = AsyncMock(return_value=None)
+                mock_registry._entity_registry = []
+                mock_registry.search_entities = MagicMock(return_value=[])
+                mock_registry_class.return_value = mock_registry
 
                 entities_result = await _run_entities_command(
                     search=None, include=None, history=None, limit=10, format="markdown"
@@ -326,10 +358,24 @@ class TestEndToEndWorkflows:
         # Update config to point to sample log
         test_config.ha_config_path = str(sample_log_file.parent)
 
-        with patch('ha_tools.commands.errors.DatabaseManager', mock_database_manager.__class__), \
-             patch('ha_tools.commands.entities.HomeAssistantAPI', mock_home_assistant_api.__class__), \
+        with patch('ha_tools.commands.errors.DatabaseManager') as mock_errors_db_class, \
+             patch('ha_tools.commands.entities.DatabaseManager') as mock_entities_db_class, \
+             patch('ha_tools.commands.entities.HomeAssistantAPI') as mock_entities_api_class, \
+             patch('ha_tools.commands.errors.HomeAssistantAPI') as mock_errors_api_class, \
              patch('ha_tools.commands.entities.RegistryManager') as mock_registry_class, \
              patch('ha_tools.commands.errors.RegistryManager') as mock_error_registry_class:
+
+            # Setup database mocks with sync methods properly mocked
+            mock_errors_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_database_manager)
+            mock_errors_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_entities_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_database_manager)
+            mock_entities_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Setup API mocks
+            mock_entities_api_class.return_value.__aenter__ = AsyncMock(return_value=mock_home_assistant_api)
+            mock_entities_api_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_errors_api_class.return_value.__aenter__ = AsyncMock(return_value=mock_home_assistant_api)
+            mock_errors_api_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_registry_class.return_value = mock_registry_manager
             mock_error_registry_class.return_value = mock_registry_manager

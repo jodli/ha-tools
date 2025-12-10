@@ -9,7 +9,7 @@ import tempfile
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ha_tools.config import HaToolsConfig, DatabaseConfig, HomeAssistantConfig
@@ -148,7 +148,8 @@ class TestEntityDiscoveryPerformance:
     @pytest.mark.asyncio
     async def test_search_pattern_performance(self):
         """Test search pattern performance with wildcard patterns."""
-        mock_registry = AsyncMock()
+        # Use MagicMock for registry (search_entities is synchronous)
+        mock_registry = MagicMock()
         mock_db = AsyncMock()
         mock_api = AsyncMock()
 
