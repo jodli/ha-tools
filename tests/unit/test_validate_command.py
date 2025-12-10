@@ -361,3 +361,111 @@ class TestValidateCommand:
 
         output = formatter.format()
         assert "invalid_package.yaml" in output
+
+
+class TestValidateWithHATags:
+    """Test validate command with Home Assistant YAML tags."""
+
+    @pytest.mark.asyncio
+    async def test_validate_file_with_include_stub_mode(self, temp_dir: Path):
+        """Test validation passes for file with !include in stub mode."""
+        yaml_file = temp_dir / "config.yaml"
+        yaml_file.write_text(
+            "automation: !include automations.yaml\nsensor: !secret api_key"
+        )
+
+        errors, warnings = await _validate_yaml_file(yaml_file, expand_includes=False)
+
+        assert len(errors) == 0
+        assert len(warnings) == 0
+
+    @pytest.mark.asyncio
+    async def test_validate_file_with_all_ha_tags(self, temp_dir: Path):
+        """Test validation passes for file with all HA tags in stub mode."""
+        yaml_file = temp_dir / "config.yaml"
+        content = """
+homeassistant:
+  name: Test
+
+automation: !include automations.yaml
+scene: !include_dir_list scenes/
+sensor: !include_dir_merge_list sensors/
+script: !include_dir_named scripts/
+group: !include_dir_merge_named groups/
+password: !secret db_password
+api_key: !env_var API_KEY
+"""
+        yaml_file.write_text(content)
+
+        errors, warnings = await _validate_yaml_file(yaml_file, expand_includes=False)
+
+        assert len(errors) == 0
+        assert len(warnings) == 0
+
+    @pytest.mark.asyncio
+    async def test_validate_file_with_include_expand_mode(self, temp_dir: Path):
+        """Test validation with expand mode resolves includes."""
+        # Create included file
+        included_file = temp_dir / "automations.yaml"
+        included_file.write_text("- alias: Test\n  trigger: []")
+
+        # Create main config
+        yaml_file = temp_dir / "config.yaml"
+        yaml_file.write_text("automation: !include automations.yaml")
+
+        errors, warnings = await _validate_yaml_file(yaml_file, expand_includes=True)
+
+        assert len(errors) == 0
+        assert len(warnings) == 0
+
+    @pytest.mark.asyncio
+    async def test_validate_file_expand_mode_missing_include(self, temp_dir: Path):
+        """Test validation with expand mode fails when include file missing."""
+        yaml_file = temp_dir / "config.yaml"
+        yaml_file.write_text("automation: !include nonexistent.yaml")
+
+        errors, warnings = await _validate_yaml_file(yaml_file, expand_includes=True)
+
+        assert len(errors) == 1
+        assert "Include file not found" in errors[0] or "nonexistent.yaml" in errors[0]
+
+    @pytest.mark.asyncio
+    async def test_syntax_validation_with_ha_tags(self, temp_dir: Path):
+        """Test full syntax validation with HA tags in config."""
+        config_dir = temp_dir / "config"
+        config_dir.mkdir()
+
+        # Create main config with HA tags
+        main_config = config_dir / "configuration.yaml"
+        main_config.write_text("""
+homeassistant:
+  name: Test
+
+automation: !include automations.yaml
+password: !secret db_password
+""")
+
+        config = MagicMock()
+        config.ha_config_path = str(config_dir)
+
+        formatter = MarkdownFormatter()
+        result = await _run_syntax_validation(config, formatter, expand_includes=False)
+
+        assert result == 0  # Success - HA tags handled in stub mode
+
+    @pytest.mark.asyncio
+    async def test_run_validation_passes_expand_includes(self, test_config):
+        """Test that _run_validation passes expand_includes parameter."""
+        with patch("ha_tools.commands.validate._run_syntax_validation") as mock_syntax:
+            mock_syntax.return_value = 0
+
+            await _run_validation(syntax_only=True, expand_includes=True)
+
+            # Check that expand_includes was passed
+            mock_syntax.assert_called_once()
+            call_kwargs = mock_syntax.call_args
+            # The third positional arg or expand_includes kwarg should be True
+            assert (
+                call_kwargs[0][2] is True
+                or call_kwargs.kwargs.get("expand_includes") is True
+            )
