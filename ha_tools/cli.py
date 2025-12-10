@@ -15,7 +15,7 @@ from rich import console
 from typer import Context
 
 from . import __version__
-from .commands import validate, entities, errors
+from .commands import entities, errors, validate
 from .config import HaToolsConfig
 from .lib.output import print_error, print_success
 
@@ -26,8 +26,10 @@ app = typer.Typer(
     invoke_without_command=True,
 )
 
-@app.callback()
-def main(
+
+@app.callback(invoke_without_command=True)
+def callback(
+    ctx: Context,
     config: Optional[str] = typer.Option(
         None,
         "--config",
@@ -65,10 +67,16 @@ def main(
     if config is not None:
         HaToolsConfig.set_config_path(config)
 
+    # Show help if no command provided
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit()
+
+
 # Import and add commands directly
-from .commands.validate import validate_command
 from .commands.entities import entities_command
 from .commands.errors import errors_command
+from .commands.validate import validate_command
 
 app.command(name="validate")(validate_command)
 app.command(name="entities")(entities_command)
@@ -99,12 +107,14 @@ def setup() -> None:
 @app.command()
 def test_connection() -> None:
     """Test connection to Home Assistant and database."""
+
     async def _test() -> None:
         try:
             config = HaToolsConfig.load()
 
             # Test database connection
             from .lib.database import DatabaseManager
+
             db = DatabaseManager(config.database)
             await db.connect()
             await db.test_connection()
@@ -112,6 +122,7 @@ def test_connection() -> None:
 
             # Test REST API connection
             from .lib.rest_api import HomeAssistantAPI
+
             async with HomeAssistantAPI(config.home_assistant) as api:
                 await api.test_connection()
 
@@ -128,7 +139,7 @@ def test_connection() -> None:
         raise typer.Exit(1)
 
 
-def main() -> None:
+def cli_main() -> None:
     """Main entry point for the CLI."""
     try:
         app()
@@ -141,4 +152,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    cli_main()

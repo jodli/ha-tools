@@ -46,7 +46,7 @@ dev = [
 ]
 
 [project.scripts]
-ha-tools = "ha_tools.cli:main"
+ha-tools = "ha_tools.cli:cli_main"
 
 [project.urls]
 Homepage = "https://github.com/home-assistant/ha-tools"
