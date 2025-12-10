@@ -322,9 +322,11 @@ class TestEntitiesCommand:
             limit=None
         )
 
-        # Should still return entity, but without history data
+        # Should still return entity with error info instead of silently failing
         assert len(entities) == 1
-        assert "history_count" not in entities[0]
+        assert entities[0]["history"] == []
+        assert entities[0]["history_count"] == 0
+        assert entities[0]["history_error"] == "Database Error"
 
     @pytest.mark.asyncio
     async def test_output_results_markdown(self):
