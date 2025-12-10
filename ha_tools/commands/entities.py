@@ -93,6 +93,8 @@ async def _run_entities_command(search: Optional[str], include: Optional[str],
     history_timeframe = None
     if history:
         history_timeframe = _parse_timeframe(history)
+        # Auto-include history when --history is specified
+        include_options = include_options | {"history"}
 
     print_info("Discovering entities...")
 
@@ -167,6 +169,7 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
 
     print_info(f"Processing {len(registry_entities)} entities...")
 
+    # Build basic entity data first
     for entity in registry_entities:
         entity_id = entity["entity_id"]
         entity_data = {
@@ -180,11 +183,15 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
             "disabled_by": entity.get("disabled_by"),
             "hidden_by": entity.get("hidden_by"),
         }
+        entities_data.append(entity_data)
 
-        # Add additional data based on include options
-        if "state" in include_options:
+    # If we need state data, fetch it concurrently
+    if "state" in include_options and entities_data:
+        import asyncio
+
+        async def get_entity_state(entity_data):
             try:
-                state = await api.get_entity_state(entity_id)
+                state = await api.get_entity_state(entity_data["entity_id"])
                 if state:
                     entity_data["current_state"] = state.get("state")
                     entity_data["last_changed"] = state.get("last_changed")
@@ -192,21 +199,43 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
                     entity_data["attributes"] = state.get("attributes", {})
             except Exception:
                 pass  # Skip state if unavailable
+            return entity_data
 
+        # Use semaphore to limit concurrent requests (avoid overwhelming Home Assistant)
+        semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent requests
+
+        async def get_with_semaphore(entity_data):
+            async with semaphore:
+                return await get_entity_state(entity_data)
+
+        # Process all entities concurrently
+        tasks = [get_with_semaphore(entity) for entity in entities_data]
+        entities_data = await asyncio.gather(*tasks)
+
+    # Handle history and relations (these can remain sequential as they're less common)
+    for entity_data in entities_data:
+        # History fetching (if needed)
         if "history" in include_options and history_timeframe:
             try:
                 history_records = await db.get_entity_states(
-                    entity_id, history_timeframe, None, 10
+                    entity_data["entity_id"], history_timeframe, None, 10
                 )
                 entity_data["history"] = history_records
                 entity_data["history_count"] = len(history_records)
-            except Exception:
-                pass  # Skip history if unavailable
+            except Exception as e:
+                # Log the error but continue processing other entities
+                entity_data["history"] = []
+                entity_data["history_count"] = 0
+                entity_data["history_error"] = str(e)
 
+        # Relations (if needed)
         if "relations" in include_options:
             relations = {}
             if entity_data.get("area_id"):
-                area_name = await registry.get_area_name(entity_data["area_id"])
+                # get_area_name might be async in some implementations
+                area_name = registry.get_area_name(entity_data["area_id"])
+                if hasattr(area_name, '__await__'):
+                    area_name = await area_name
                 relations["area"] = {
                     "id": entity_data["area_id"],
                     "name": area_name
@@ -214,19 +243,23 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
 
             if entity_data.get("device_id"):
                 device_info = registry.get_device_metadata(entity_data["device_id"])
+                # Handle case where get_device_metadata might be async (from mocks)
+                if hasattr(device_info, '__await__'):
+                    device_info = await device_info
                 relations["device"] = {
                     "id": entity_data["device_id"],
                     "name": device_info.get("name", "Unknown"),
                     "manufacturer": device_info.get("manufacturer"),
                     "model": device_info.get("model"),
                 }
-
             entity_data["relations"] = relations
 
         if "metadata" in include_options:
-            entity_data["full_metadata"] = entity
-
-        entities_data.append(entity_data)
+            # Find the original entity data
+            for entity in registry_entities:
+                if entity["entity_id"] == entity_data["entity_id"]:
+                    entity_data["full_metadata"] = entity
+                    break
 
     return entities_data
 

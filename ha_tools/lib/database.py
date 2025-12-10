@@ -179,7 +179,10 @@ class DatabaseManager:
         async with self.get_connection() as conn:
             if self._database_type == "sqlite":
                 cursor = await conn.execute(query, params or ())
-                columns = [description[0] for description in cursor.description]
+                if cursor.description:
+                    columns = [description[0] for description in cursor.description]
+                else:
+                    columns = []
                 rows = await cursor.fetchall()
                 return [dict(zip(columns, row)) for row in rows]
             elif self._database_type == "mysql":
@@ -217,32 +220,42 @@ class DatabaseManager:
                                        start_time: Optional[datetime],
                                        end_time: Optional[datetime],
                                        limit: Optional[int]) -> List[Dict[str, Any]]:
-        """Get entity states from SQLite database."""
-        query = "SELECT entity_id, state, last_changed, last_updated, attributes FROM states"
+        """Get entity states from SQLite database (modern schema with states_meta)."""
+        query = """
+        SELECT
+            sm.entity_id,
+            s.state,
+            datetime(COALESCE(s.last_changed_ts, s.last_updated_ts), 'unixepoch') as last_changed,
+            datetime(s.last_updated_ts, 'unixepoch') as last_updated,
+            sa.shared_attrs as attributes
+        FROM states s
+        INNER JOIN states_meta sm ON s.metadata_id = sm.metadata_id
+        LEFT JOIN state_attributes sa ON s.attributes_id = sa.attributes_id
+        """
         conditions = []
         params = []
 
         if entity_id:
             if '*' in entity_id:
                 entity_id = entity_id.replace('*', '%')
-                conditions.append("entity_id LIKE ?")
+                conditions.append("sm.entity_id LIKE ?")
                 params.append(entity_id)
             else:
-                conditions.append("entity_id = ?")
+                conditions.append("sm.entity_id = ?")
                 params.append(entity_id)
 
         if start_time:
-            conditions.append("last_changed >= ?")
-            params.append(start_time.isoformat())
+            conditions.append("COALESCE(s.last_changed_ts, s.last_updated_ts) >= ?")
+            params.append(start_time.timestamp())
 
         if end_time:
-            conditions.append("last_changed <= ?")
-            params.append(end_time.isoformat())
+            conditions.append("COALESCE(s.last_changed_ts, s.last_updated_ts) <= ?")
+            params.append(end_time.timestamp())
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += " ORDER BY last_changed DESC"
+        query += " ORDER BY COALESCE(s.last_changed_ts, s.last_updated_ts) DESC"
 
         if limit:
             query += " LIMIT ?"
@@ -254,10 +267,17 @@ class DatabaseManager:
                                      start_time: Optional[datetime],
                                      end_time: Optional[datetime],
                                      limit: Optional[int]) -> List[Dict[str, Any]]:
-        """Get entity states from MySQL database."""
+        """Get entity states from MySQL database (modern schema with states_meta)."""
         query = """
-        SELECT entity_id, state, last_changed, last_updated, attributes
-        FROM states
+        SELECT
+            sm.entity_id,
+            s.state,
+            FROM_UNIXTIME(COALESCE(s.last_changed_ts, s.last_updated_ts)) as last_changed,
+            FROM_UNIXTIME(s.last_updated_ts) as last_updated,
+            sa.shared_attrs as attributes
+        FROM states s
+        INNER JOIN states_meta sm ON s.metadata_id = sm.metadata_id
+        LEFT JOIN state_attributes sa ON s.attributes_id = sa.attributes_id
         """
         conditions = []
         params = []
@@ -265,24 +285,24 @@ class DatabaseManager:
         if entity_id:
             if '*' in entity_id:
                 entity_id = entity_id.replace('*', '%')
-                conditions.append("entity_id LIKE %s")
+                conditions.append("sm.entity_id LIKE %s")
                 params.append(entity_id)
             else:
-                conditions.append("entity_id = %s")
+                conditions.append("sm.entity_id = %s")
                 params.append(entity_id)
 
         if start_time:
-            conditions.append("last_changed >= %s")
-            params.append(start_time)
+            conditions.append("COALESCE(s.last_changed_ts, s.last_updated_ts) >= %s")
+            params.append(start_time.timestamp())
 
         if end_time:
-            conditions.append("last_changed <= %s")
-            params.append(end_time)
+            conditions.append("COALESCE(s.last_changed_ts, s.last_updated_ts) <= %s")
+            params.append(end_time.timestamp())
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += " ORDER BY last_changed DESC"
+        query += " ORDER BY COALESCE(s.last_changed_ts, s.last_updated_ts) DESC"
 
         if limit:
             query += " LIMIT %s"
@@ -294,38 +314,50 @@ class DatabaseManager:
                                           start_time: Optional[datetime],
                                           end_time: Optional[datetime],
                                           limit: Optional[int]) -> List[Dict[str, Any]]:
-        """Get entity states from PostgreSQL database."""
+        """Get entity states from PostgreSQL database (modern schema with states_meta)."""
         query = """
-        SELECT entity_id, state, last_changed, last_updated, attributes
-        FROM states
+        SELECT
+            sm.entity_id,
+            s.state,
+            to_timestamp(COALESCE(s.last_changed_ts, s.last_updated_ts)) as last_changed,
+            to_timestamp(s.last_updated_ts) as last_updated,
+            sa.shared_attrs as attributes
+        FROM states s
+        INNER JOIN states_meta sm ON s.metadata_id = sm.metadata_id
+        LEFT JOIN state_attributes sa ON s.attributes_id = sa.attributes_id
         """
         conditions = []
         params = []
+        param_idx = 1
 
         if entity_id:
             if '*' in entity_id:
                 entity_id = entity_id.replace('*', '%')
-                conditions.append("entity_id LIKE $1")
+                conditions.append(f"sm.entity_id LIKE ${param_idx}")
                 params.append(entity_id)
+                param_idx += 1
             else:
-                conditions.append("entity_id = $1")
+                conditions.append(f"sm.entity_id = ${param_idx}")
                 params.append(entity_id)
+                param_idx += 1
 
         if start_time:
-            conditions.append("last_changed >= $" + str(len(params) + 1))
-            params.append(start_time)
+            conditions.append(f"COALESCE(s.last_changed_ts, s.last_updated_ts) >= ${param_idx}")
+            params.append(start_time.timestamp())
+            param_idx += 1
 
         if end_time:
-            conditions.append("last_changed <= $" + str(len(params) + 1))
-            params.append(end_time)
+            conditions.append(f"COALESCE(s.last_changed_ts, s.last_updated_ts) <= ${param_idx}")
+            params.append(end_time.timestamp())
+            param_idx += 1
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += " ORDER BY last_changed DESC"
+        query += " ORDER BY COALESCE(s.last_changed_ts, s.last_updated_ts) DESC"
 
         if limit:
-            query += " LIMIT $" + str(len(params) + 1)
+            query += f" LIMIT ${param_idx}"
             params.append(limit)
 
         return await self.execute_query(query, tuple(params))
