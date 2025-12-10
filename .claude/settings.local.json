@@ -5,7 +5,9 @@
       "Bash(git commit:*)",
       "Bash(uv run pytest:*)",
       "Bash(uv run python:*)",
-      "Bash(uv run ha-tools:*)"
+      "Bash(uv run ha-tools:*)",
+      "SlashCommand(/implement_plan thoughts/shared/research/2025-12-10-validate-command-refactoring.md)",
+      "SlashCommand(/implement_plan:*)"
     ],
     "deny": [],
     "ask": []
