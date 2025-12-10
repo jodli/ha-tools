@@ -8,12 +8,17 @@ import asyncio
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 import yaml
 
 from ha_tools.commands.validate import (
-    _run_validation, _run_syntax_validation, _run_full_validation,
-    _validate_yaml_file, _generate_syntax_report, _generate_semantic_report
+    _generate_semantic_report,
+    _generate_syntax_report,
+    _run_full_validation,
+    _run_syntax_validation,
+    _run_validation,
+    _validate_yaml_file,
 )
 from ha_tools.lib.output import MarkdownFormatter
 
@@ -24,24 +29,22 @@ class TestValidateCommand:
     @pytest.mark.asyncio
     async def test_run_validation_syntax_only(self, test_config):
         """Test validation with syntax-only mode."""
-        with patch('ha_tools.commands.validate._run_syntax_validation') as mock_syntax:
+        with patch("ha_tools.commands.validate._run_syntax_validation") as mock_syntax:
             mock_syntax.return_value = 0  # Success
 
-            result = await _run_validation(syntax_only=True, fix=False)
+            result = await _run_validation(syntax_only=True)
             assert result == 0
             mock_syntax.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_run_validation_full(self, test_config):
         """Test full validation mode."""
-        with patch('ha_tools.commands.validate._run_full_validation') as mock_full:
+        with patch("ha_tools.commands.validate._run_full_validation") as mock_full:
             mock_full.return_value = 0  # Success
 
-            result = await _run_validation(syntax_only=False, fix=False)
+            result = await _run_validation(syntax_only=False)
             assert result == 0
             mock_full.assert_called_once()
-
-    
 
     @pytest.mark.asyncio
     async def test_run_syntax_validation_success(self, sample_ha_config: Path):
@@ -51,7 +54,7 @@ class TestValidateCommand:
         config.ha_config_path = str(sample_ha_config)
 
         formatter = MarkdownFormatter()
-        result = await _run_syntax_validation(config, formatter, fix=False)
+        result = await _run_syntax_validation(config, formatter)
 
         assert result == 0  # Success
 
@@ -70,35 +73,9 @@ class TestValidateCommand:
         config.ha_config_path = str(invalid_config)
 
         formatter = MarkdownFormatter()
-        result = await _run_syntax_validation(config, formatter, fix=False)
+        result = await _run_syntax_validation(config, formatter)
 
         assert result == 2  # Validation errors exit code
-
-    @pytest.mark.asyncio
-    async def test_run_syntax_validation_with_fixes(self, temp_dir: Path):
-        """Test syntax validation with automatic fixes."""
-        # Create config with fixable issues
-        config_dir = temp_dir / "config"
-        config_dir.mkdir()
-
-        config_file = config_dir / "configuration.yaml"
-        with open(config_file, "w") as f:
-            f.write("homeassistant:\n  name: test   \n  unit_system: metric")  # trailing spaces
-
-        config = MagicMock()
-        config.ha_config_path = str(config_dir)
-
-        formatter = MarkdownFormatter()
-        result = await _run_syntax_validation(config, formatter, fix=True)
-
-        assert result == 0  # Success
-
-        # Check that fixes were applied
-        with open(config_file, "r") as f:
-            content = f.read()
-            assert "test   \n" not in content  # Trailing spaces removed
-
-    
 
     @pytest.mark.asyncio
     async def test_run_full_validation_syntax_errors(self, sample_ha_config: Path):
@@ -106,16 +83,14 @@ class TestValidateCommand:
         config = MagicMock()
         config.ha_config_path = str(sample_ha_config)
 
-        with patch('ha_tools.commands.validate._run_syntax_validation') as mock_syntax:
+        with patch("ha_tools.commands.validate._run_syntax_validation") as mock_syntax:
             # Mock syntax validation failure
             mock_syntax.return_value = 2  # Syntax errors
 
             formatter = MarkdownFormatter()
-            result = await _run_full_validation(config, formatter, fix=False)
+            result = await _run_full_validation(config, formatter)
 
             assert result == 2  # Should return syntax error code
-
-    
 
     @pytest.mark.asyncio
     async def test_validate_yaml_file_success(self, temp_dir: Path):
@@ -123,32 +98,27 @@ class TestValidateCommand:
         # Create valid YAML file
         yaml_file = temp_dir / "valid.yaml"
         valid_content = {
-            "homeassistant": {
-                "name": "Test Home",
-                "unit_system": "metric"
-            }
+            "homeassistant": {"name": "Test Home", "unit_system": "metric"}
         }
 
         with open(yaml_file, "w") as f:
             yaml.dump(valid_content, f)
 
-        errors, warnings, fixes = await _validate_yaml_file(yaml_file, fix=False)
+        errors, warnings = await _validate_yaml_file(yaml_file)
 
         assert len(errors) == 0
         assert len(warnings) == 0
-        assert len(fixes) == 0
 
     @pytest.mark.asyncio
     async def test_validate_yaml_file_not_found(self, temp_dir: Path):
         """Test YAML file validation when file doesn't exist."""
         missing_file = temp_dir / "missing.yaml"
 
-        errors, warnings, fixes = await _validate_yaml_file(missing_file, fix=False)
+        errors, warnings = await _validate_yaml_file(missing_file)
 
         assert len(errors) == 0
         assert len(warnings) == 1
         assert "File not found" in warnings[0]
-        assert len(fixes) == 0
 
     @pytest.mark.asyncio
     async def test_validate_yaml_file_syntax_error(self, temp_dir: Path):
@@ -158,35 +128,11 @@ class TestValidateCommand:
         with open(yaml_file, "w") as f:
             f.write("invalid: yaml: content: [")  # Invalid YAML
 
-        errors, warnings, fixes = await _validate_yaml_file(yaml_file, fix=False)
+        errors, warnings = await _validate_yaml_file(yaml_file)
 
         assert len(errors) == 1
         assert "YAML syntax error" in errors[0]
         assert len(warnings) == 0
-        assert len(fixes) == 0
-
-    @pytest.mark.asyncio
-    async def test_validate_yaml_file_with_fixes(self, temp_dir: Path):
-        """Test YAML file validation with automatic fixes applied."""
-        # Create file with fixable issues
-        yaml_file = temp_dir / "fixable.yaml"
-        original_content = "homeassistant:\n  name: test   \n  unit_system: metric\nsensor: []"
-
-        with open(yaml_file, "w") as f:
-            f.write(original_content)
-
-        errors, warnings, fixes = await _validate_yaml_file(yaml_file, fix=True)
-
-        assert len(errors) == 0
-        assert len(warnings) == 0
-        assert len(fixes) == 2  # trailing spaces + final newline
-
-        # Verify fixes were applied
-        with open(yaml_file, "r") as f:
-            fixed_content = f.read()
-        assert fixed_content != original_content
-        assert fixed_content.endswith("\n")
-        assert "test   \n" not in fixed_content
 
     @pytest.mark.asyncio
     async def test_validate_yaml_file_read_error(self, temp_dir: Path):
@@ -195,22 +141,20 @@ class TestValidateCommand:
         yaml_file = temp_dir / "error.yaml"
         yaml_file.touch()  # Create empty file
 
-        with patch('builtins.open', side_effect=PermissionError("Permission denied")):
-            errors, warnings, fixes = await _validate_yaml_file(yaml_file, fix=False)
+        with patch("builtins.open", side_effect=PermissionError("Permission denied")):
+            errors, warnings = await _validate_yaml_file(yaml_file)
 
             assert len(errors) == 1
             assert "Error validating" in errors[0]
             assert len(warnings) == 0
-            assert len(fixes) == 0
 
     def test_generate_syntax_report_success(self):
         """Test syntax report generation for successful validation."""
         formatter = MarkdownFormatter()
         errors = []
         warnings = []
-        fixes = []
 
-        _generate_syntax_report(formatter, errors, warnings, fixes)
+        _generate_syntax_report(formatter, errors, warnings)
 
         output = formatter.format()
         assert "✅ Syntax Validation" in output
@@ -221,28 +165,24 @@ class TestValidateCommand:
         formatter = MarkdownFormatter()
         errors = ["YAML syntax error in file1.yaml"]
         warnings = ["File not found: file2.yaml"]
-        fixes = ["Removed trailing spaces in file1.yaml"]
 
-        _generate_syntax_report(formatter, errors, warnings, fixes)
+        _generate_syntax_report(formatter, errors, warnings)
 
         output = formatter.format()
         assert "❌ Syntax Errors" in output
         assert "⚠️ Warnings" in output
-        assert "✅ Fixes Applied" in output
         assert "📊 Summary" in output
         assert "Status: **FAILED**" in output
         assert "Errors: 1" in output
         assert "Warnings: 1" in output
-        assert "Fixes applied: 1" in output
 
     def test_generate_syntax_report_with_warnings_only(self):
         """Test syntax report generation with warnings only."""
         formatter = MarkdownFormatter()
         errors = []
         warnings = ["File not found: optional_file.yaml"]
-        fixes = []
 
-        _generate_syntax_report(formatter, errors, warnings, fixes)
+        _generate_syntax_report(formatter, errors, warnings)
 
         output = formatter.format()
         assert "Status: **PASSED**" in output  # Warnings don't cause failure
@@ -255,7 +195,7 @@ class TestValidateCommand:
         validation_result = {
             "valid": True,
             "errors": [],
-            "messages": ["Configuration loaded successfully"]
+            "messages": ["Configuration loaded successfully"],
         }
 
         _generate_semantic_report(formatter, validation_result)
@@ -272,9 +212,9 @@ class TestValidateCommand:
             "valid": False,
             "errors": [
                 "Component 'unknown_platform' not found",
-                "Invalid integration configuration"
+                "Invalid integration configuration",
             ],
-            "messages": ["Configuration has errors"]
+            "messages": ["Configuration has errors"],
         }
 
         _generate_semantic_report(formatter, validation_result)
@@ -293,8 +233,8 @@ class TestValidateCommand:
             "messages": [
                 "Component 'sensor' loaded",
                 "Component 'switch' loaded",
-                "3 automations loaded"
-            ]
+                "3 automations loaded",
+            ],
         }
 
         _generate_semantic_report(formatter, validation_result)
@@ -321,13 +261,15 @@ class TestValidateCommand:
 
         package_file = packages_dir / "test_package.yaml"
         with open(package_file, "w") as f:
-            f.write("sensor:\n  - platform: template\n    sensors:\n      test:\n        value_template: 'ok'")
+            f.write(
+                "sensor:\n  - platform: template\n    sensors:\n      test:\n        value_template: 'ok'"
+            )
 
         config = MagicMock()
         config.ha_config_path = str(config_dir)
 
         formatter = MarkdownFormatter()
-        result = await _run_syntax_validation(config, formatter, fix=False)
+        result = await _run_syntax_validation(config, formatter)
 
         assert result == 0
 
@@ -348,13 +290,18 @@ class TestValidateCommand:
 
         template_file = templates_dir / "test_template.yaml"
         with open(template_file, "w") as f:
-            f.write("test_template:\n  value_template: '{{ now().strftime(\"%H:%M\") }}'")
+            f.write(
+                "test_template:\n  value_template: '{{ now().strftime(\"%H:%M\") }}'"
+            )
 
         config = MagicMock()
         config.ha_config_path = str(config_dir)
 
         formatter = MarkdownFormatter()
-        result = await _run_syntax_validation(config, formatter, fix=False)
+        result = await _run_syntax_validation(
+            config,
+            formatter,
+        )
 
         assert result == 0
 
@@ -375,7 +322,10 @@ class TestValidateCommand:
         config.ha_config_path = str(config_dir)
 
         formatter = MarkdownFormatter()
-        result = await _run_syntax_validation(config, formatter, fix=False)
+        result = await _run_syntax_validation(
+            config,
+            formatter,
+        )
 
         assert result == 0  # Should succeed with just main config
 
@@ -402,7 +352,10 @@ class TestValidateCommand:
         config.ha_config_path = str(config_dir)
 
         formatter = MarkdownFormatter()
-        result = await _run_syntax_validation(config, formatter, fix=False)
+        result = await _run_syntax_validation(
+            config,
+            formatter,
+        )
 
         assert result == 2  # Validation errors
 
