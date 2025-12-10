@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from pydantic_settings import BaseSettings
 
 # Module-level variable for custom config path
@@ -26,7 +26,8 @@ class DatabaseConfig(BaseModel):
     max_overflow: int = Field(default=20, description="Maximum connection overflow")
     timeout: int = Field(default=30, description="Connection timeout in seconds")
 
-    @validator("url")
+    @field_validator("url")
+    @classmethod
     def validate_database_url(cls, v: str) -> str:
         """Validate database URL format."""
         if not v:
@@ -53,7 +54,8 @@ class HomeAssistantConfig(BaseModel):
     )
     timeout: int = Field(default=30, description="API request timeout in seconds")
 
-    @validator("url")
+    @field_validator("url")
+    @classmethod
     def validate_url(cls, v: str) -> str:
         """Validate Home Assistant URL format."""
         if not v:
@@ -84,11 +86,11 @@ class HaToolsConfig(BaseSettings):
     )
     verbose: bool = Field(default=False, description="Enable verbose logging")
 
-    
-    class Config:
-        env_prefix = "HA_TOOLS_"
-        env_file = ".env"
-        env_nested_delimiter = "__"
+    model_config = ConfigDict(
+        env_prefix="HA_TOOLS_",
+        env_file=".env",
+        env_nested_delimiter="__"
+    )
 
     @classmethod
     def set_config_path(cls, path: Union[str, Path]) -> None:

@@ -27,43 +27,40 @@ High-performance CLI tool for AI agents working with Home Assistant configuratio
 ### Installation
 
 ```bash
-# Using uvx (recommended)
-uvx --from . ha-tools setup
-
-# Or install in development mode
-pip install -e .
+# Using uv (recommended)
+uv run ha-tools setup
 ```
 
 ### Setup
 
 ```bash
 # Interactive setup wizard
-ha-tools setup
+uv run ha-tools setup
 
 # Test connections
-ha-tools test-connection
+uv run ha-tools test-connection
 ```
 
 ### Usage
 
 ```bash
 # Quick syntax validation
-ha-tools validate --syntax-only
+uv run ha-tools validate --syntax-only
 
 # Full validation (2-3 minutes)
-ha-tools validate
+uv run ha-tools validate
 
 # Entity discovery
-ha-tools entities
+uv run ha-tools entities
 
 # Search entities with history
-ha-tools entities --search "temp_*" --include history --history 24h
+uv run ha-tools entities --search "temp_*" --include history --history 24h
 
 # Error analysis
-ha-tools errors --current
+uv run ha-tools errors --current
 
 # Historical error analysis with correlation
-ha-tools errors --log 24h --correlation
+uv run ha-tools errors --log 24h --correlation
 ```
 
 ## Architecture
@@ -131,13 +128,10 @@ ha_tools/
 
 ```bash
 # Install development dependencies
-pip install -e ".[dev]"
-
-# Run directly
-python -m ha_tools.cli --help
+uv run ha-tools setup
 
 # Test with uvx
-uvx --from . ha-tools entities --search "sensor.*"
+uv run ha-tools entities --search "sensor.*"
 ```
 
 ## AI Agent Integration

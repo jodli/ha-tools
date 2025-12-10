@@ -14,6 +14,44 @@ from ha_tools.config import HomeAssistantConfig
 from ha_tools.lib.rest_api import HomeAssistantAPI
 
 
+def create_mock_response(status=200, json_data=None, text_data=None):
+    """Create a properly mocked async response."""
+    mock_response = AsyncMock()
+    mock_response.status = status
+    if json_data is not None:
+        mock_response.json.return_value = json_data
+    if text_data is not None:
+        mock_response.text.return_value = text_data
+    return mock_response
+
+
+def create_mock_context(mock_response):
+    """Create a properly mocked async context manager."""
+    mock_context = MagicMock()
+    mock_context.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_context.__aexit__ = AsyncMock(return_value=None)
+    return mock_context
+
+
+def create_mock_session(mock_response):
+    """Create a properly mocked aiohttp session with get/post methods."""
+    mock_session = MagicMock()
+    mock_session.closed = False
+    mock_context = create_mock_context(mock_response)
+    mock_session.get = MagicMock(return_value=mock_context)
+    mock_session.post = MagicMock(return_value=mock_context)
+    mock_session.close = AsyncMock()
+    return mock_session
+
+
+def patch_aiohttp_components():
+    """Helper to patch both ClientSession and TCPConnector."""
+    return (
+        patch('ha_tools.lib.rest_api.ClientSession'),
+        patch('ha_tools.lib.rest_api.TCPConnector')
+    )
+
+
 class TestHomeAssistantAPI:
     """Test HomeAssistantAPI connection and data retrieval."""
 
@@ -50,14 +88,18 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+
             mock_session = AsyncMock()
             mock_session.closed = False
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             # First call should create session
             session1 = await api._get_session()
             mock_session_class.assert_called_once()
+            mock_connector_class.assert_called_once()
 
             # Second call should reuse session
             session2 = await api._get_session()
@@ -73,16 +115,27 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
             mock_session1 = AsyncMock()
-            mock_session1.closed = True
+            mock_session1.closed = False
             mock_session2 = AsyncMock()
             mock_session2.closed = False
             mock_session_class.side_effect = [mock_session1, mock_session2]
+            mock_connector_class.return_value = MagicMock()
 
-            # First call with closed session should create new one
-            session1 = await api._get_session()
-            assert session1 is mock_session2
+            # First call creates session1
+            session = await api._get_session()
+            assert session is mock_session1
+            assert mock_session_class.call_count == 1
+
+            # Simulate session being closed externally
+            mock_session1.closed = True
+
+            # Second call should detect closed session and create new one
+            session = await api._get_session()
+            assert session is mock_session2
+            assert mock_session_class.call_count == 2
 
     @pytest.mark.asyncio
     async def test_close_session(self):
@@ -93,7 +146,8 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
             mock_session = AsyncMock()
             mock_session.closed = False
             mock_session_class.return_value = mock_session
@@ -124,10 +178,10 @@ class TestHomeAssistantAPI:
             url="http://localhost:8123",
             access_token="test_token"
         )
-        api = HomeAssistantConfig(url="http://localhost:8123", access_token="test_token")
         api_client = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
             mock_session = AsyncMock()
             mock_session.closed = True
             mock_session_class.return_value = mock_session
@@ -147,13 +201,13 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_response.json.return_value = {"message": "API running."}
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=200, json_data={"message": "API running."})
+            mock_session = create_mock_session(mock_response)
+
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             # Should not raise exception
             await api.test_connection()
@@ -167,12 +221,12 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 500
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=500)
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             with pytest.raises(RuntimeError, match="API test failed: HTTP 500"):
                 await api.test_connection()
@@ -186,13 +240,12 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_response.json.return_value = {"message": "Wrong message"}
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=200, json_data={"message": "Wrong message"})
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             with pytest.raises(RuntimeError, match="API test failed: HTTP 200"):
                 await api.test_connection()
@@ -223,13 +276,12 @@ class TestHomeAssistantAPI:
             }
         ]
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_response.json.return_value = sample_states
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=200, json_data=sample_states)
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             states = await api.get_states()
             assert len(states) == 2
@@ -245,12 +297,12 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 401
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=401)
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             with pytest.raises(RuntimeError, match="Failed to get states: HTTP 401"):
                 await api.get_states()
@@ -272,13 +324,12 @@ class TestHomeAssistantAPI:
             "last_updated": "2024-01-01T12:00:00+00:00"
         }
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_response.json.return_value = entity_state
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=200, json_data=entity_state)
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             state = await api.get_entity_state("sensor.temperature")
             assert state is not None
@@ -294,12 +345,12 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 404
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=404)
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             state = await api.get_entity_state("sensor.nonexistent")
             assert state is None
@@ -313,12 +364,12 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 500
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=500)
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             with pytest.raises(RuntimeError, match="Failed to get entity sensor.temperature: HTTP 500"):
                 await api.get_entity_state("sensor.temperature")
@@ -349,13 +400,12 @@ class TestHomeAssistantAPI:
             ]
         ]
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_response.json.return_value = history_data
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=200, json_data=history_data)
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             history = await api.get_entity_history("sensor.temperature")
             assert len(history) == 1
@@ -375,13 +425,12 @@ class TestHomeAssistantAPI:
         start_time = datetime(2024, 1, 1, 10, 0, 0)
         end_time = datetime(2024, 1, 1, 14, 0, 0)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_response.json.return_value = []
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=200, json_data=[])
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             await api.get_entity_history(
                 "sensor.temperature",
@@ -395,7 +444,8 @@ class TestHomeAssistantAPI:
             call_args = mock_session.get.call_args
             assert "filter_start_time" in call_args[1]["params"]
             assert "filter_end_time" in call_args[1]["params"]
-            assert call_args[1]["params"]["minimal_response"] == "false"
+            # When minimal_response=False, the param is not included (only "true" is set)
+            assert "minimal_response" not in call_args[1]["params"]
 
     @pytest.mark.asyncio
     async def test_get_entity_history_default_parameters(self):
@@ -406,13 +456,12 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_response.json.return_value = []
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=200, json_data=[])
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             await api.get_entity_history("sensor.temperature")
 
@@ -429,12 +478,12 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 500
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=500)
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             with pytest.raises(RuntimeError, match="Failed to get history for sensor.temperature: HTTP 500"):
                 await api.get_entity_history("sensor.temperature")
@@ -448,13 +497,12 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_response.json.return_value = []
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=200, json_data=[])
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             await api.get_states()
             mock_session.get.assert_called_with("http://localhost:8123/api/states")
@@ -474,13 +522,12 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
-            mock_session = AsyncMock()
-            mock_response = AsyncMock()
-            mock_response.status = 200
-            mock_response.json.return_value = []
-            mock_session.get.return_value.__aenter__.return_value = mock_response
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
+            mock_response = create_mock_response(status=200, json_data=[])
+            mock_session = create_mock_session(mock_response)
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = MagicMock()
 
             await api.get_states()
 
@@ -501,7 +548,8 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
             mock_session = AsyncMock()
             mock_session_class.return_value = mock_session
 
@@ -521,16 +569,20 @@ class TestHomeAssistantAPI:
         )
         api = HomeAssistantAPI(config)
 
-        with patch('aiohttp.ClientSession') as mock_session_class:
+        with patch('ha_tools.lib.rest_api.ClientSession') as mock_session_class, \
+             patch('aiohttp.TCPConnector') as mock_connector_class:
             mock_session = AsyncMock()
+            mock_session.closed = False
+            mock_connector = MagicMock()
             mock_session_class.return_value = mock_session
+            mock_connector_class.return_value = mock_connector
 
             await api._get_session()
 
-            # Verify connection pool configuration
+            # Verify TCPConnector was created with correct pool limits
+            mock_connector_class.assert_called_once_with(limit=10, limit_per_host=5)
+
+            # Verify connector was passed to ClientSession
             call_kwargs = mock_session_class.call_args[1]
             assert "connector" in call_kwargs
-            connector = call_kwargs["connector"]
-            assert isinstance(connector, aiohttp.TCPConnector)
-            assert connector._limit == 10
-            assert connector._limit_per_host == 5
+            assert call_kwargs["connector"] is mock_connector

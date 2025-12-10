@@ -30,6 +30,9 @@ class TestErrorsCommand:
 
             # Mock database and API
             mock_db = AsyncMock()
+            # Mock sync methods with MagicMock to avoid unawaited coroutines
+            mock_db.is_connected = MagicMock(return_value=True)
+            mock_db.get_connection_error = MagicMock(return_value=None)
             mock_db_class.return_value.__aenter__.return_value = mock_db
             mock_api = AsyncMock()
             mock_api_class.return_value.__aenter__.return_value = mock_api
