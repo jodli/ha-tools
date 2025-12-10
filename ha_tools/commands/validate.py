@@ -2,22 +2,21 @@
 Validate command for ha-tools.
 
 Provides configuration validation with syntax-only and full validation modes.
+Supports Home Assistant's custom YAML tags (!include, !secret, etc.).
 """
 
 import asyncio
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config import HaToolsConfig
-from ..lib.database import DatabaseManager
-from ..lib.output import MarkdownFormatter, print_error, print_info, print_success
+from ..lib.output import MarkdownFormatter, print_error, print_info
 from ..lib.rest_api import HomeAssistantAPI
-from .common import create_progress
+from ..lib.yaml_loader import load_secrets, load_yaml
 
 console = Console()
 
@@ -29,20 +28,28 @@ def validate_command(
         "-s",
         help="Only perform syntax validation (fast, local-only)",
     ),
+    expand_includes: bool = typer.Option(
+        False,
+        "--expand-includes",
+        "-e",
+        help="Fully expand !include directives during syntax validation",
+    ),
 ) -> None:
     """
     Validate Home Assistant configuration.
 
     Performs syntax-only validation (local YAML parsing) or full validation
-    via Home Assistant API.
+    via Home Assistant API. Supports Home Assistant's custom YAML tags
+    (!include, !secret, !include_dir_*, !env_var).
 
     Examples:
-        ha-tools validate --syntax-only
-        ha-tools validate
+        ha-tools validate --syntax-only      # Quick syntax check
+        ha-tools validate --syntax-only -e   # Syntax check with include expansion
+        ha-tools validate                    # Full validation (syntax + API)
     """
     try:
         # Run async validation
-        exit_code = asyncio.run(_run_validation(syntax_only))
+        exit_code = asyncio.run(_run_validation(syntax_only, expand_includes))
         sys.exit(exit_code)
     except KeyboardInterrupt:
         print_error("Validation cancelled by user")
@@ -52,7 +59,7 @@ def validate_command(
         sys.exit(1)
 
 
-async def _run_validation(syntax_only: bool) -> int:
+async def _run_validation(syntax_only: bool, expand_includes: bool = False) -> int:
     """Run the validation process."""
     try:
         config = HaToolsConfig.load()
@@ -63,18 +70,22 @@ async def _run_validation(syntax_only: bool) -> int:
     formatter = MarkdownFormatter(title="Configuration Validation")
 
     if syntax_only:
-        return await _run_syntax_validation(config, formatter)
+        return await _run_syntax_validation(config, formatter, expand_includes)
     else:
-        return await _run_full_validation(config, formatter)
+        return await _run_full_validation(config, formatter, expand_includes)
 
 
 async def _run_syntax_validation(
-    config: HaToolsConfig, formatter: MarkdownFormatter
+    config: HaToolsConfig, formatter: MarkdownFormatter, expand_includes: bool = False
 ) -> int:
     """Run syntax-only validation."""
     print_info("Running syntax validation...")
     errors = []
     warnings = []
+
+    # Load secrets if expanding includes
+    config_path = Path(config.ha_config_path)
+    secrets = load_secrets(config_path) if expand_includes else None
 
     with Progress(
         SpinnerColumn(),
@@ -85,24 +96,30 @@ async def _run_syntax_validation(
 
         # Validate main configuration
         main_errors, main_warnings = await _validate_yaml_file(
-            Path(config.ha_config_path) / "configuration.yaml"
+            config_path / "configuration.yaml",
+            expand_includes=expand_includes,
+            secrets=secrets,
         )
         errors.extend(main_errors)
         warnings.extend(main_warnings)
 
         # Validate package files
-        packages_path = Path(config.ha_config_path) / "packages"
+        packages_path = config_path / "packages"
         if packages_path.exists():
             for package_file in packages_path.glob("*.yaml"):
-                pkg_errors, pkg_warnings = await _validate_yaml_file(package_file)
+                pkg_errors, pkg_warnings = await _validate_yaml_file(
+                    package_file, expand_includes=expand_includes, secrets=secrets
+                )
                 errors.extend(pkg_errors)
                 warnings.extend(pkg_warnings)
 
         # Validate templates
-        templates_path = Path(config.ha_config_path) / "templates"
+        templates_path = config_path / "templates"
         if templates_path.exists():
             for template_file in templates_path.glob("*.yaml"):
-                tpl_errors, tpl_warnings = await _validate_yaml_file(template_file)
+                tpl_errors, tpl_warnings = await _validate_yaml_file(
+                    template_file, expand_includes=expand_includes, secrets=secrets
+                )
                 errors.extend(tpl_errors)
                 warnings.extend(tpl_warnings)
 
@@ -123,13 +140,13 @@ async def _run_syntax_validation(
 
 
 async def _run_full_validation(
-    config: HaToolsConfig, formatter: MarkdownFormatter
+    config: HaToolsConfig, formatter: MarkdownFormatter, expand_includes: bool = False
 ) -> int:
     """Run full validation including Home Assistant API."""
     print_info("Running full validation...")
 
     # First run syntax validation
-    syntax_exit_code = await _run_syntax_validation(config, formatter)
+    syntax_exit_code = await _run_syntax_validation(config, formatter, expand_includes)
     if syntax_exit_code == 2:
         return 2  # Don't continue if syntax errors
 
@@ -159,8 +176,26 @@ async def _run_full_validation(
     return 0  # Success
 
 
-async def _validate_yaml_file(file_path: Path) -> tuple[list[str], list[str]]:
-    """Validate a single YAML file."""
+async def _validate_yaml_file(
+    file_path: Path,
+    expand_includes: bool = False,
+    secrets: dict[str, str] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Validate a single YAML file.
+
+    Uses custom YAML loader that supports Home Assistant's custom tags
+    (!include, !secret, etc.).
+
+    Args:
+        file_path: Path to the YAML file to validate
+        expand_includes: If True, fully resolve includes. If False, use stubs.
+        secrets: Pre-loaded secrets dict (used when expand_includes=True)
+
+    Returns:
+        Tuple of (errors, warnings) lists
+    """
+    import yaml
+
     errors = []
     warnings = []
 
@@ -169,13 +204,16 @@ async def _validate_yaml_file(file_path: Path) -> tuple[list[str], list[str]]:
         return errors, warnings
 
     try:
-        import yaml
-
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # Try to parse YAML
-        yaml.safe_load(content)
+        # Try to parse YAML with HA tag support
+        load_yaml(
+            content,
+            config_path=file_path.parent,
+            expand_includes=expand_includes,
+            secrets=secrets,
+        )
 
     except yaml.YAMLError as e:
         errors.append(f"YAML syntax error in {file_path}: {e}")
