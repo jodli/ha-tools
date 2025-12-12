@@ -11,9 +11,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ha_tools.commands.errors import (
-    _run_errors_command, _parse_timeframe, _filter_errors,
+    _run_errors_command, _filter_errors,
     _extract_entity_references, _calculate_correlation_strength
 )
+from ha_tools.lib.utils import parse_timeframe
 
 
 class TestErrorsCommand:
@@ -62,31 +63,30 @@ class TestErrorsCommand:
             mock_collect.assert_called_once()
             mock_output.assert_called_once()
 
-    
     def test_parse_timeframe_hours(self):
         """Test parsing timeframe in hours."""
         base_time = datetime(2024, 1, 1, 12, 0, 0)
-        with patch('ha_tools.commands.errors.datetime') as mock_datetime:
+        with patch('ha_tools.lib.utils.datetime') as mock_datetime:
             mock_datetime.now.return_value = base_time
 
-            result = _parse_timeframe("24h")
+            result = parse_timeframe("24h")
             expected = base_time - timedelta(hours=24)
             assert result == expected
 
     def test_parse_timeframe_days(self):
         """Test parsing timeframe in days."""
         base_time = datetime(2024, 1, 1, 12, 0, 0)
-        with patch('ha_tools.commands.errors.datetime') as mock_datetime:
+        with patch('ha_tools.lib.utils.datetime') as mock_datetime:
             mock_datetime.now.return_value = base_time
 
-            result = _parse_timeframe("7d")
+            result = parse_timeframe("7d")
             expected = base_time - timedelta(days=7)
             assert result == expected
 
     def test_parse_timeframe_invalid(self):
         """Test parsing invalid timeframe."""
-        with pytest.raises(ValueError, match="invalid literal for int"):
-            _parse_timeframe("invalid")
+        with pytest.raises(ValueError, match="Invalid timeframe format"):
+            parse_timeframe("invalid")
 
     def test_filter_errors_entity(self):
         """Test filtering errors by entity pattern."""
