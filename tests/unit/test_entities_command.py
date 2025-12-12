@@ -10,9 +10,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ha_tools.commands.entities import (
-    _run_entities_command, _parse_include_options, _parse_timeframe,
+    _run_entities_command, _parse_include_options,
     _get_entities, _output_results, _output_table_format, _output_markdown_format
 )
+from ha_tools.lib.utils import parse_timeframe
 
 
 class TestEntitiesCommand:
@@ -59,47 +60,47 @@ class TestEntitiesCommand:
     def test_parse_timeframe_hours(self):
         """Test parsing timeframe in hours."""
         base_time = datetime(2024, 1, 1, 12, 0, 0)
-        with patch('ha_tools.commands.entities.datetime') as mock_datetime:
+        with patch('ha_tools.lib.utils.datetime') as mock_datetime:
             mock_datetime.now.return_value = base_time
 
-            result = _parse_timeframe("24h")
+            result = parse_timeframe("24h")
             expected = base_time - timedelta(hours=24)
             assert result == expected
 
     def test_parse_timeframe_days(self):
         """Test parsing timeframe in days."""
         base_time = datetime(2024, 1, 1, 12, 0, 0)
-        with patch('ha_tools.commands.entities.datetime') as mock_datetime:
+        with patch('ha_tools.lib.utils.datetime') as mock_datetime:
             mock_datetime.now.return_value = base_time
 
-            result = _parse_timeframe("7d")
+            result = parse_timeframe("7d")
             expected = base_time - timedelta(days=7)
             assert result == expected
 
     def test_parse_timeframe_minutes(self):
         """Test parsing timeframe in minutes."""
         base_time = datetime(2024, 1, 1, 12, 0, 0)
-        with patch('ha_tools.commands.entities.datetime') as mock_datetime:
+        with patch('ha_tools.lib.utils.datetime') as mock_datetime:
             mock_datetime.now.return_value = base_time
 
-            result = _parse_timeframe("30m")
+            result = parse_timeframe("30m")
             expected = base_time - timedelta(minutes=30)
             assert result == expected
 
     def test_parse_timeframe_weeks(self):
         """Test parsing timeframe in weeks."""
         base_time = datetime(2024, 1, 1, 12, 0, 0)
-        with patch('ha_tools.commands.entities.datetime') as mock_datetime:
+        with patch('ha_tools.lib.utils.datetime') as mock_datetime:
             mock_datetime.now.return_value = base_time
 
-            result = _parse_timeframe("2w")
+            result = parse_timeframe("2w")
             expected = base_time - timedelta(weeks=2)
             assert result == expected
 
     def test_parse_timeframe_invalid(self):
         """Test parsing invalid timeframe."""
-        with pytest.raises(ValueError, match="invalid literal for int"):
-            _parse_timeframe("invalid")
+        with pytest.raises(ValueError, match="Invalid timeframe format"):
+            parse_timeframe("invalid")
 
     @pytest.mark.asyncio
     async def test_get_entities_all(self):

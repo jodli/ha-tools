@@ -6,7 +6,7 @@ Provides entity discovery and analysis with multi-source data aggregation.
 
 import asyncio
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, List
 
 import typer
@@ -17,6 +17,7 @@ from ..lib.database import DatabaseManager
 from ..lib.rest_api import HomeAssistantAPI
 from ..lib.registry import RegistryManager
 from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp
+from ..lib.utils import parse_timeframe
 
 console = Console()
 
@@ -92,7 +93,7 @@ async def _run_entities_command(search: Optional[str], include: Optional[str],
     # Parse history timeframe
     history_timeframe = None
     if history:
-        history_timeframe = _parse_timeframe(history)
+        history_timeframe = parse_timeframe(history)
         # Auto-include history when --history is specified
         include_options = include_options | {"history"}
 
@@ -126,26 +127,6 @@ def _parse_include_options(include: Optional[str]) -> set[str]:
 
     # Filter for valid options
     return {opt for opt in options if opt in valid_options}
-
-
-def _parse_timeframe(timeframe: str) -> datetime:
-    """Parse timeframe string into datetime."""
-    timeframe = timeframe.lower().strip()
-
-    if timeframe.endswith("h"):
-        hours = int(timeframe[:-1])
-        return datetime.now() - timedelta(hours=hours)
-    elif timeframe.endswith("d"):
-        days = int(timeframe[:-1])
-        return datetime.now() - timedelta(days=days)
-    elif timeframe.endswith("m"):
-        minutes = int(timeframe[:-1])
-        return datetime.now() - timedelta(minutes=minutes)
-    elif timeframe.endswith("w"):
-        weeks = int(timeframe[:-1])
-        return datetime.now() - timedelta(weeks=weeks)
-    else:
-        raise ValueError(f"Invalid timeframe format: {timeframe}")
 
 
 async def _get_entities(registry: RegistryManager, db: DatabaseManager,

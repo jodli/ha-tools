@@ -6,7 +6,7 @@ Provides runtime error diagnostics with correlation to entity state changes.
 
 import asyncio
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 import re
@@ -19,6 +19,7 @@ from ..lib.database import DatabaseManager
 from ..lib.rest_api import HomeAssistantAPI
 from ..lib.registry import RegistryManager
 from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp
+from ..lib.utils import parse_timeframe
 
 console = Console()
 
@@ -97,7 +98,7 @@ async def _run_errors_command(current: bool, log: Optional[str], entity: Optiona
     # Parse log timeframe
     log_timeframe = None
     if log:
-        log_timeframe = _parse_timeframe(log)
+        log_timeframe = parse_timeframe(log)
 
     print_info("Analyzing errors...")
 
@@ -127,26 +128,6 @@ async def _run_errors_command(current: bool, log: Optional[str], entity: Optiona
             await _output_errors(errors_data, format, correlation)
 
     return 0
-
-
-def _parse_timeframe(timeframe: str) -> datetime:
-    """Parse timeframe string into datetime."""
-    timeframe = timeframe.lower().strip()
-
-    if timeframe.endswith("h"):
-        hours = int(timeframe[:-1])
-        return datetime.now() - timedelta(hours=hours)
-    elif timeframe.endswith("d"):
-        days = int(timeframe[:-1])
-        return datetime.now() - timedelta(days=days)
-    elif timeframe.endswith("m"):
-        minutes = int(timeframe[:-1])
-        return datetime.now() - timedelta(minutes=minutes)
-    elif timeframe.endswith("w"):
-        weeks = int(timeframe[:-1])
-        return datetime.now() - timedelta(weeks=weeks)
-    else:
-        raise ValueError(f"Invalid timeframe format: {timeframe}")
 
 
 async def _collect_errors(api: HomeAssistantAPI, db: DatabaseManager,
