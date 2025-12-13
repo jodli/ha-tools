@@ -6,6 +6,7 @@ Provides runtime error diagnostics with correlation to entity state changes.
 
 import asyncio
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
@@ -18,7 +19,7 @@ from ..config import HaToolsConfig
 from ..lib.database import DatabaseManager
 from ..lib.rest_api import HomeAssistantAPI
 from ..lib.registry import RegistryManager
-from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp
+from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp, print_verbose, print_verbose_timing
 from ..lib.utils import parse_timeframe
 
 console = Console()
@@ -105,9 +106,11 @@ async def _run_errors_command(current: bool, log: Optional[str], entity: Optiona
     # Initialize database manager - may fail gracefully
     db_manager = DatabaseManager(config.database)
     api_manager = HomeAssistantAPI(config.home_assistant)
+    print_verbose("Connecting to Home Assistant API...")
 
     async with db_manager as db:
         async with api_manager as api:
+            print_verbose("Connected to Home Assistant API")
             registry = RegistryManager(config)
 
             # Check database availability and notify if not connected
@@ -120,9 +123,12 @@ async def _run_errors_command(current: bool, log: Optional[str], entity: Optiona
                 await registry.load_all_registries(api)
 
             # Collect errors from different sources
+            print_verbose("Collecting errors from sources...")
+            start = time.time()
             errors_data = await _collect_errors(
                 api, db, registry, current, log_timeframe, entity, integration, correlation
             )
+            print_verbose_timing("Error collection", (time.time() - start) * 1000)
 
             # Output results
             await _output_errors(errors_data, format, correlation)
@@ -232,8 +238,10 @@ async def _analyze_log_files(ha_config_path: str, since: datetime,
             continue
 
         try:
+            print_verbose(f"Analyzing log file: {log_path}")
             file_errors = await _parse_log_file(log_path, since, entity, integration)
             log_errors.extend(file_errors)
+            print_verbose(f"Found {len(file_errors)} errors in {log_path}")
         except Exception as e:
             print_info(f"Could not parse log file {log_path}: {e}")
 
@@ -340,6 +348,7 @@ async def _perform_correlation_analysis(db: DatabaseManager, registry: RegistryM
 
         # Check state changes around error time
         for entity_id in entity_references:
+            print_verbose(f"Correlating error with entity: {entity_id}")
             try:
                 # Get state changes 5 minutes before and after error
                 start_time = error_time - timedelta(minutes=5)

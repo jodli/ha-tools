@@ -6,6 +6,7 @@ Provides entity discovery and analysis with multi-source data aggregation.
 
 import asyncio
 import sys
+import time
 from datetime import datetime
 from typing import Optional, List
 
@@ -16,7 +17,7 @@ from ..config import HaToolsConfig
 from ..lib.database import DatabaseManager
 from ..lib.rest_api import HomeAssistantAPI
 from ..lib.registry import RegistryManager
-from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp
+from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp, print_verbose, print_verbose_timing
 from ..lib.utils import parse_timeframe
 
 console = Console()
@@ -104,12 +105,18 @@ async def _run_entities_command(search: Optional[str], include: Optional[str],
             registry = RegistryManager(config)
 
             # Load registry data
+            print_verbose("Loading entity registries...")
+            start = time.time()
             await registry.load_all_registries(api)
+            print_verbose_timing("Registry load", (time.time() - start) * 1000)
 
             # Get entities
+            print_verbose("Discovering entities...")
+            start = time.time()
             entities_data = await _get_entities(
                 registry, db, api, search, include_options, history_timeframe, limit
             )
+            print_verbose_timing("Entity discovery", (time.time() - start) * 1000)
 
             # Format and output results
             await _output_results(entities_data, format, include_options)
@@ -168,7 +175,8 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
 
     # If we need state data, fetch it concurrently
     if "state" in include_options and entities_data:
-        import asyncio
+        print_verbose(f"Fetching state for {len(entities_data)} entities...")
+        state_start = time.time()
 
         async def get_entity_state(entity_data):
             try:
@@ -192,8 +200,12 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
         # Process all entities concurrently
         tasks = [get_with_semaphore(entity) for entity in entities_data]
         entities_data = await asyncio.gather(*tasks)
+        print_verbose_timing("State fetching", (time.time() - state_start) * 1000)
 
     # Handle history and relations (these can remain sequential as they're less common)
+    if "history" in include_options and history_timeframe:
+        print_verbose(f"Querying history for {len(entities_data)} entities...")
+
     for entity_data in entities_data:
         # History fetching (if needed)
         if "history" in include_options and history_timeframe:

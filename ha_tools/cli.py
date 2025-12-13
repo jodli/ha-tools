@@ -17,7 +17,7 @@ from typer import Context
 from . import __version__
 from .commands import entities, errors, validate
 from .config import HaToolsConfig
-from .lib.output import print_error, print_success
+from .lib.output import print_error, print_success, set_verbose
 
 # Create the main typer app
 app = typer.Typer(
@@ -62,6 +62,9 @@ def callback(
     if version:
         typer.echo(f"ha-tools {__version__}")
         raise typer.Exit()
+
+    # Enable verbose output if requested
+    set_verbose(verbose)
 
     # Store global configuration for subcommands
     if config is not None:
