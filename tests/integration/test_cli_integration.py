@@ -44,7 +44,7 @@ class TestCLIIntegration:
         result = self.runner.invoke(app, ["validate", "--help"])
         assert result.exit_code == 0
         assert "--syntax-only" in result.stdout
-        assert "--fix" in result.stdout
+        assert "--expand-includes" in result.stdout
 
     def test_entities_command_help(self):
         """Test entities command help."""
@@ -80,11 +80,11 @@ class TestCLIIntegration:
             mock_api_class.return_value.__aenter__.return_value = mock_api
 
             # Test syntax-only validation (should work without API)
-            result = await _run_validation(syntax_only=True, fix=False)
+            result = await _run_validation(syntax_only=True, expand_includes=False)
             assert result == 0
 
             # Test full validation (should use API)
-            result = await _run_validation(syntax_only=False, fix=False)
+            result = await _run_validation(syntax_only=False, expand_includes=False)
             assert result == 0
 
     @pytest.mark.asyncio
@@ -221,7 +221,7 @@ class TestCLIIntegration:
         with patch('ha_tools.config.HaToolsConfig.load') as mock_load:
             mock_load.side_effect = ValueError("Invalid configuration")
 
-            result = await _run_validation(syntax_only=True, fix=False)
+            result = await _run_validation(syntax_only=True, expand_includes=False)
             assert result == 3  # Configuration error
 
             result = await _run_entities_command(
@@ -320,7 +320,7 @@ class TestEndToEndWorkflows:
             mock_api_class.return_value.__aexit__.return_value = None
 
             # Step 1: Quick syntax validation
-            result = await _run_validation(syntax_only=True, fix=False)
+            result = await _run_validation(syntax_only=True, expand_includes=False)
             assert result == 0
 
             # Step 2: Check affected entities
@@ -349,7 +349,7 @@ class TestEndToEndWorkflows:
                 assert entities_result == 0
 
             # Step 3: Full validation
-            result = await _run_validation(syntax_only=False, fix=False)
+            result = await _run_validation(syntax_only=False, expand_includes=False)
             assert result == 0
 
     @pytest.mark.asyncio

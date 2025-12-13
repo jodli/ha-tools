@@ -115,18 +115,100 @@ class HomeAssistantAPI:
             return await response.json()
 
     async def get_errors(self) -> List[Dict[str, Any]]:
-        """Get current Home Assistant errors."""
+        """
+        Get current Home Assistant errors from the error log.
+
+        Tries multiple endpoints:
+        1. /api/error_log (standard HA installations)
+        2. /api/hassio/core/logs (HA OS/Supervised installations)
+
+        Returns:
+            List of error dictionaries with keys: timestamp, level, source, message, context
+        """
+        session = await self._get_session()
+
+        # Try standard error_log endpoint first
         try:
-            # Try to get error log from HA
-            session = await self._get_session()
             async with session.get(f"{self._base_url}/api/error_log") as response:
                 if response.status == 200:
-                    return await response.json()
+                    log_text = await response.text()
+                    errors = self._parse_error_log(log_text)
+                    if errors:
+                        return errors
         except Exception:
             pass
 
-        # Fallback: return empty list
+        # Fall back to Supervisor API for HA OS/Supervised
+        try:
+            async with session.get(f"{self._base_url}/api/hassio/core/logs") as response:
+                if response.status == 200:
+                    log_text = await response.text()
+                    # Strip ANSI color codes from Supervisor logs
+                    log_text = self._strip_ansi_codes(log_text)
+                    return self._parse_error_log(log_text)
+        except Exception as e:
+            print_warning(f"Could not fetch error log: {e}")
+
         return []
+
+    def _strip_ansi_codes(self, text: str) -> str:
+        """Remove ANSI escape codes from text."""
+        import re
+        ansi_pattern = re.compile(r'\x1b\[[0-9;]*m')
+        return ansi_pattern.sub('', text)
+
+    def _parse_error_log(self, log_text: str) -> List[Dict[str, Any]]:
+        """Parse error log text into structured error records."""
+        import re
+        from datetime import datetime
+
+        errors: List[Dict[str, Any]] = []
+        current_error: Optional[Dict[str, Any]] = None
+
+        for line in log_text.splitlines():
+            if not line.strip():
+                continue
+
+            # Match log line format: "2024-01-15 10:30:45.123 ERROR (MainThread) [component] Message"
+            match = re.match(
+                r"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+"
+                r"(ERROR|WARNING|CRITICAL)\s+"
+                r"\(([^)]+)\)\s+"
+                r"\[([^\]]+)\]\s*"
+                r"(.*)",
+                line
+            )
+
+            if match:
+                # Save previous error if exists
+                if current_error:
+                    errors.append(current_error)
+
+                timestamp_str, level, thread, source, message = match.groups()
+                try:
+                    timestamp = datetime.fromisoformat(timestamp_str.replace(" ", "T"))
+                except ValueError:
+                    timestamp = datetime.now()
+
+                current_error = {
+                    "timestamp": timestamp,
+                    "level": level,
+                    "source": source,
+                    "message": message,
+                    "context": []
+                }
+            elif current_error:
+                # Continuation line (traceback, etc.)
+                current_error["context"].append(line)
+
+        # Add final error
+        if current_error:
+            errors.append(current_error)
+
+        # Filter to only ERROR and CRITICAL (not WARNING) and limit to recent
+        errors = [e for e in errors if e["level"] in ("ERROR", "CRITICAL")]
+
+        return errors[-50:]  # Return most recent 50 errors
 
     async def get_services(self) -> Dict[str, Any]:
         """Get all available services."""

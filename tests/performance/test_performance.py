@@ -29,35 +29,59 @@ class TestDatabasePerformance:
 
         await db.connect()
 
-        # Create test table with many records
+        # Create Home Assistant's modern schema (states_meta, states, state_attributes)
+        await db.execute_query("""
+            CREATE TABLE states_meta (
+                metadata_id INTEGER PRIMARY KEY,
+                entity_id TEXT UNIQUE
+            )
+        """)
+        await db.execute_query("""
+            CREATE TABLE state_attributes (
+                attributes_id INTEGER PRIMARY KEY,
+                shared_attrs TEXT
+            )
+        """)
         await db.execute_query("""
             CREATE TABLE states (
-                entity_id TEXT,
+                state_id INTEGER PRIMARY KEY,
+                metadata_id INTEGER,
+                attributes_id INTEGER,
                 state TEXT,
-                last_changed TEXT,
-                last_updated TEXT,
-                attributes TEXT
+                last_changed_ts REAL,
+                last_updated_ts REAL,
+                FOREIGN KEY (metadata_id) REFERENCES states_meta(metadata_id),
+                FOREIGN KEY (attributes_id) REFERENCES state_attributes(attributes_id)
             )
         """)
 
+        # Insert entity metadata (100 unique entities)
+        for i in range(100):
+            await db.execute_query(
+                "INSERT INTO states_meta (metadata_id, entity_id) VALUES (?, ?)",
+                (i, f"sensor.test_{i}")
+            )
+
         # Insert test data
         base_time = datetime.now()
-        insert_data = []
-        for i in range(1000):  # 1000 records
-            insert_data.append((
-                f"sensor.test_{i % 100}",  # 100 unique entities
-                str(i % 50),  # 50 unique states
-                (base_time - timedelta(minutes=i)).isoformat(),
-                (base_time - timedelta(minutes=i)).isoformat(),
-                f'{{"index": {i}}}'
-            ))
 
         # Measure insert performance
         start_time = time.time()
-        for entity_id, state, last_changed, last_updated, attributes in insert_data:
+        for i in range(1000):  # 1000 state records
+            metadata_id = i % 100  # Link to one of 100 entities
+            attrs = f'{{"index": {i}}}'
+
+            # Insert attributes
             await db.execute_query(
-                "INSERT INTO states (entity_id, state, last_changed, last_updated, attributes) VALUES (?, ?, ?, ?, ?)",
-                (entity_id, state, last_changed, last_updated, attributes)
+                "INSERT INTO state_attributes (attributes_id, shared_attrs) VALUES (?, ?)",
+                (i, attrs)
+            )
+
+            # Insert state
+            ts = (base_time - timedelta(minutes=i)).timestamp()
+            await db.execute_query(
+                "INSERT INTO states (state_id, metadata_id, attributes_id, state, last_changed_ts, last_updated_ts) VALUES (?, ?, ?, ?, ?, ?)",
+                (i, metadata_id, i, str(i % 50), ts, ts)
             )
         insert_time = time.time() - start_time
 
@@ -76,6 +100,8 @@ class TestDatabasePerformance:
         print(f"Queried entity states in {query_time:.3f} seconds")
         assert query_time < 1.0  # Should complete within 1 second
         assert len(results) <= 100  # Should respect limit
+
+        await db.close()
 
     @pytest.mark.asyncio
     async def test_connection_pool_performance(self):
