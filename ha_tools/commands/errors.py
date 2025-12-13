@@ -146,7 +146,6 @@ async def _collect_errors(api: HomeAssistantAPI, db: DatabaseManager,
     errors_data = {
         "api_errors": [],
         "log_errors": [],
-        "database_errors": [],
         "correlations": []
     }
 
@@ -448,18 +447,13 @@ def _output_markdown_format(errors_data: dict, correlation: bool) -> None:
     formatter = MarkdownFormatter(title="Error Analysis Results")
 
     # Summary
-    total_errors = (
-        len(errors_data["api_errors"]) +
-        len(errors_data["log_errors"]) +
-        len(errors_data["database_errors"])
-    )
+    total_errors = len(errors_data["api_errors"]) + len(errors_data["log_errors"])
 
     formatter.add_section(
         "📊 Summary",
         f"Total errors found: **{total_errors}**\n"
         f"- Current runtime errors: {len(errors_data['api_errors'])}\n"
         f"- Log file errors: {len(errors_data['log_errors'])}\n"
-        f"- Database errors: {len(errors_data['database_errors'])}\n"
         f"- Correlations found: {len(errors_data['correlations'])}"
     )
 
@@ -514,7 +508,7 @@ def _output_markdown_format(errors_data: dict, correlation: bool) -> None:
                 f"**State Changes:** {len(corr['state_changes'])} states around error time"
             )
 
-    if not any([errors_data["api_errors"], errors_data["log_errors"], errors_data["database_errors"]]):
+    if not any([errors_data["api_errors"], errors_data["log_errors"]]):
         formatter.add_section("✅ No Errors Found", "Great! No errors detected in the specified timeframe.")
 
     print(formatter.format())
