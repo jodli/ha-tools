@@ -46,7 +46,6 @@ class TestErrorsCommand:
             mock_collect.return_value = {
                 "api_errors": [],
                 "log_errors": [],
-                "database_errors": [],
                 "correlations": []
             }
 
