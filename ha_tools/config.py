@@ -141,7 +141,7 @@ class HaToolsConfig(BaseSettings):
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Convert to dict, excluding private attributes
-        config_dict = self.dict(exclude_none=True)
+        config_dict = self.model_dump(exclude_none=True)
 
         with open(save_path, "w", encoding="utf-8") as f:
             yaml.dump(config_dict, f, default_flow_style=False, indent=2)
@@ -162,7 +162,7 @@ class HaToolsConfig(BaseSettings):
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary for API usage."""
-        return self.dict()
+        return self.model_dump()
 
 
 # Version information

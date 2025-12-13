@@ -135,6 +135,8 @@ async def _collect_errors(api: HomeAssistantAPI, db: DatabaseManager,
                          log_timeframe: Optional[datetime], entity: Optional[str],
                          integration: Optional[str], correlation: bool) -> dict:
     """Collect errors from multiple sources."""
+    from datetime import timedelta
+
     errors_data = {
         "api_errors": [],
         "log_errors": [],
@@ -149,6 +151,17 @@ async def _collect_errors(api: HomeAssistantAPI, db: DatabaseManager,
             errors_data["api_errors"] = _filter_errors(api_errors, entity, integration)
         except Exception as e:
             print_info(f"Could not fetch API errors: {e}")
+
+        # If API returned no errors, fall back to reading log file for recent errors
+        if not errors_data["api_errors"]:
+            print_info("API returned no errors, checking log file...")
+            # Look at last 1 hour for "current" errors
+            recent_timeframe = datetime.now() - timedelta(hours=1)
+            log_errors = await _analyze_log_files(
+                registry.config.ha_config_path, recent_timeframe, entity, integration
+            )
+            # Put these in api_errors since they're "current" errors
+            errors_data["api_errors"] = log_errors
 
     # Get historical errors from log files
     if log_timeframe:
@@ -445,7 +458,18 @@ def _output_markdown_format(errors_data: dict, correlation: bool) -> None:
     if errors_data["api_errors"]:
         formatter.add_section("🚨 Current Runtime Errors", "")
         for i, error in enumerate(errors_data["api_errors"][:10], 1):
-            formatter.add_section(f"Error {i}", str(error))
+            timestamp = format_timestamp(error.get("timestamp"))
+            source = error.get("source", "Unknown")
+            message = error.get("message", "No message")
+            context = error.get("context", [])
+            context_str = "\n".join(context[:5]) if context else ""
+
+            formatter.add_section(
+                f"Error {i} - {timestamp}",
+                f"**Source:** `{source}`\n"
+                f"**Message:** {message}\n"
+                + (f"**Context:**\n```\n{context_str}\n```" if context_str else "")
+            )
         if len(errors_data["api_errors"]) > 10:
             formatter.add_section("", f"... and {len(errors_data['api_errors']) - 10} more errors")
 
