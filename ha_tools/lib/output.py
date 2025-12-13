@@ -18,6 +18,32 @@ from rich import box
 
 console = Console()
 
+# Verbose output state
+_verbose_enabled = False
+
+
+def set_verbose(enabled: bool) -> None:
+    """Enable or disable verbose output."""
+    global _verbose_enabled
+    _verbose_enabled = enabled
+
+
+def is_verbose() -> bool:
+    """Check if verbose output is enabled."""
+    return _verbose_enabled
+
+
+def print_verbose(message: str) -> None:
+    """Print a message only when verbose mode is enabled."""
+    if _verbose_enabled:
+        console.print(f"[dim]  {message}[/dim]")
+
+
+def print_verbose_timing(operation: str, duration_ms: float) -> None:
+    """Print timing information in verbose mode."""
+    if _verbose_enabled:
+        console.print(f"[dim]  {operation}: {duration_ms:.1f}ms[/dim]")
+
 
 def print_success(message: str) -> None:
     """Print a success message."""

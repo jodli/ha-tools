@@ -7,6 +7,7 @@ Supports Home Assistant's custom YAML tags (!include, !secret, etc.).
 
 import asyncio
 import sys
+import time
 from pathlib import Path
 
 import typer
@@ -14,7 +15,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config import HaToolsConfig
-from ..lib.output import MarkdownFormatter, print_error, print_info
+from ..lib.output import MarkdownFormatter, print_error, print_info, print_verbose, print_verbose_timing
 from ..lib.rest_api import HomeAssistantAPI
 from ..lib.yaml_loader import load_secrets, load_yaml
 
@@ -95,18 +96,25 @@ async def _run_syntax_validation(
         task = progress.add_task("Validating YAML files...", total=None)
 
         # Validate main configuration
+        print_verbose(f"Parsing YAML file: {config_path / 'configuration.yaml'}")
+        start = time.time()
         main_errors, main_warnings = await _validate_yaml_file(
             config_path / "configuration.yaml",
             expand_includes=expand_includes,
             secrets=secrets,
         )
+        print_verbose_timing("Main config parsing", (time.time() - start) * 1000)
         errors.extend(main_errors)
         warnings.extend(main_warnings)
 
         # Validate package files
         packages_path = config_path / "packages"
         if packages_path.exists():
-            for package_file in packages_path.glob("*.yaml"):
+            package_files = list(packages_path.glob("*.yaml"))
+            if package_files:
+                print_verbose(f"Parsing {len(package_files)} package files...")
+            for package_file in package_files:
+                print_verbose(f"Parsing YAML file: {package_file}")
                 pkg_errors, pkg_warnings = await _validate_yaml_file(
                     package_file, expand_includes=expand_includes, secrets=secrets
                 )
@@ -116,7 +124,11 @@ async def _run_syntax_validation(
         # Validate templates
         templates_path = config_path / "templates"
         if templates_path.exists():
-            for template_file in templates_path.glob("*.yaml"):
+            template_files = list(templates_path.glob("*.yaml"))
+            if template_files:
+                print_verbose(f"Parsing {len(template_files)} template files...")
+            for template_file in template_files:
+                print_verbose(f"Parsing YAML file: {template_file}")
                 tpl_errors, tpl_warnings = await _validate_yaml_file(
                     template_file, expand_includes=expand_includes, secrets=secrets
                 )
@@ -152,6 +164,7 @@ async def _run_full_validation(
 
     # Then run semantic validation via Home Assistant
     try:
+        print_verbose("Sending configuration to Home Assistant for validation...")
         async with HomeAssistantAPI(config.home_assistant) as api:
             with Progress(
                 SpinnerColumn(),
@@ -162,7 +175,9 @@ async def _run_full_validation(
                     "Performing Home Assistant validation...", total=None
                 )
 
+                start = time.time()
                 validation_result = await api.validate_config()
+                print_verbose_timing("API validation", (time.time() - start) * 1000)
                 progress.update(task, description="✓ Validation complete")
 
             _generate_semantic_report(formatter, validation_result)
