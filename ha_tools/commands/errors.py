@@ -36,7 +36,7 @@ def errors_command(
         None,
         "--log",
         "-l",
-        help="Timeframe for log analysis (e.g., 24h, 7d)"
+        help="Timeframe for log analysis: Nh (hours), Nd (days), Nm (minutes), Nw (weeks)"
     ),
     entity: Optional[str] = typer.Option(
         None,
@@ -70,7 +70,7 @@ def errors_command(
 
     Examples:
         ha-tools errors --current
-        ha-tools errors --log 24h --entity "heizung*"
+        ha-tools errors --log 24h --entity "heizung"
         ha-tools errors --integration "knx" --correlation
     """
     try:

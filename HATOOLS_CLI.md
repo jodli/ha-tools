@@ -51,22 +51,27 @@ Discover and analyze entities with hybrid data sources.
 - `relations`: areas, groups, device relationships
 
 **History Timeframes:**
-- Relative: `24h`, `7d`, `30d`
-- Samples: `last:10`, `samples:50`
+- `Nh` - hours (e.g., `24h`)
+- `Nd` - days (e.g., `7d`)
+- `Nm` - minutes (e.g., `30m`)
+- `Nw` - weeks (e.g., `2w`)
 
 **Examples:**
 ```bash
 # Discover all entities with metadata
 ha-tools entities
 
-# Find temperature sensors with current values
-ha-tools entities --search "temp_*" --include state
+# Find temperature sensors with current values (substring matching)
+ha-tools entities --search "temp" --include state
 
 # Analyze heating system behavior over time
-ha-tools entities --search "heizung*" --include history --history 7d
+ha-tools entities --search "heizung" --include history --history 7d
 
 # Long-term trends (365+ days via database statistics)
 ha-tools entities --include history --history 365d
+
+# Enable verbose output for debugging
+ha-tools entities --verbose
 ```
 
 ### `ha-tools errors [--current] [--log <timeframe>] [--entity <pattern>]`
@@ -83,11 +88,14 @@ Diagnose runtime errors using multiple sources.
 # Current runtime errors
 ha-tools errors --current
 
-# Error history for specific entities
-ha-tools errors --entity "heizung*" --log 24h
+# Error history for specific entities (substring matching)
+ha-tools errors --entity "heizung" --log 24h
 
 # Full error analysis
 ha-tools errors --log 7d
+
+# Use verbose for connection debugging
+ha-tools errors --current --verbose
 ```
 
 ## Output Format
@@ -144,8 +152,8 @@ output:
 # 2. Quick syntax validation
 ha-tools validate --syntax-only
 
-# 3. Check affected entities
-ha-tools entities --search "modified_area*" --include state
+# 3. Check affected entities (substring matching)
+ha-tools entities --search "modified_area" --include state
 
 # 4. Full validation if syntax OK
 ha-tools validate
@@ -160,14 +168,14 @@ ha-tools errors --current
 ```bash
 # User: "Heating automation stopped working"
 
-# Check entity behavior history
-ha-tools entities --search "heizung*" --include history --history 24h
+# Check entity behavior history (use --verbose for timing)
+ha-tools entities --search "heizung" --include history --history 24h --verbose
 
 # Look for related errors
-ha-tools errors --entity "heizung*" --log 24h
+ha-tools errors --entity "heizung" --log 24h
 
 # Analyze automation dependencies
-ha-tools entities --include relations --search "automation.heating*"
+ha-tools entities --include relations --search "automation.heating"
 ```
 
 ## Extension Points

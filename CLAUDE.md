@@ -11,7 +11,7 @@ This is the `ha-tools` Python CLI - a lightweight, high-performance tool designe
 **3-Command Design**:
 
 - `ha-tools validate [--syntax-only]` - Configuration validation
-- `ha-tools entities [--search <pattern>] [--include <type>] [--history <timeframe>]` - Entity discovery and analysis
+- `ha-tools entities [--search <pattern>] [--include <type>] [--history <timeframe>] [--verbose]` - Entity discovery and analysis
 - `ha-tools errors [--current] [--log <timeframe>] [--entity <pattern>]` - Runtime error diagnostics
 
 **Performance Strategy**:
@@ -30,15 +30,20 @@ uv run ha-tools setup
 uv run ha-tools validate --syntax-only  # Quick syntax check
 uv run ha-tools validate               # Full validation (2-3 min)
 
-# Entity discovery examples
+# Entity discovery examples (--search uses substring matching)
 uv run ha-tools entities                                       # Overview
-uv run ha-tools entities --search "temp_*"                     # Find temperature sensors
-uv run ha-tools entities --include history --history 7d       # With historical data
-uv run ha-tools entities --include state --search "sensor.*"   # Full state details
+uv run ha-tools entities --search "temp"                       # Find entities with "temp" in ID
+uv run ha-tools entities --include history --history 7d        # With historical data
+uv run ha-tools entities --include state --search "sensor"     # Full state details
+uv run ha-tools entities --verbose                             # Show timing and debug info
+
+# Timeframe formats: Nh (hours), Nd (days), Nm (minutes), Nw (weeks)
+uv run ha-tools entities --history 30m                         # Last 30 minutes
+uv run ha-tools entities --history 2w                          # Last 2 weeks
 
 # Error diagnostics
 uv run ha-tools errors --current                              # Current runtime errors
-uv run ha-tools errors --log 24h --entity "heizung*"         # Entity-specific errors
+uv run ha-tools errors --log 24h --entity "heizung"           # Entity-specific errors (substring match)
 ```
 
 ## Implementation Structure
@@ -111,8 +116,8 @@ Use the established patterns from `ENTITY_EXPLORER_KNOWLEDGE_EXTRACTION.md`:
 # 1. Quick syntax check
 uv run ha-tools validate --syntax-only
 
-# 2. Check affected entities
-uv run ha-tools entities --search "modified_area*" --include state
+# 2. Check affected entities (substring matching)
+uv run ha-tools entities --search "modified_area" --include state
 
 # 3. Full validation
 uv run ha-tools validate
@@ -124,14 +129,14 @@ uv run ha-tools errors --current
 ### Debugging Existing Issues
 
 ```bash
-# Analyze entity behavior
-uv run ha-tools entities --search "heizung*" --include history --history 24h
+# Analyze entity behavior (use --verbose for timing details)
+uv run ha-tools entities --search "heizung" --include history --history 24h --verbose
 
 # Correlate with errors
-uv run ha-tools errors --log 24h --entity "heizung*"
+uv run ha-tools errors --log 24h --entity "heizung"
 
 # Check automation dependencies
-uv run ha-tools entities --include relations --search "automation.heating*"
+uv run ha-tools entities --include relations --search "automation.heating"
 ```
 
 ## Error Handling
