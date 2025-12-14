@@ -79,11 +79,13 @@ def callback(
 # Import and add commands directly
 from .commands.entities import entities_command
 from .commands.errors import errors_command
+from .commands.history import history_command
 from .commands.validate import validate_command
 
 app.command(name="validate")(validate_command)
 app.command(name="entities")(entities_command)
 app.command(name="errors")(errors_command)
+app.command(name="history")(history_command)
 
 console = console.Console()
 
