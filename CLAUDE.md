@@ -41,6 +41,14 @@ uv run ha-tools entities --verbose                             # Show timing and
 uv run ha-tools entities --history 30m                         # Last 30 minutes
 uv run ha-tools entities --history 2w                          # Last 2 weeks
 
+# History analysis examples
+uv run ha-tools history sensor.temperature                     # Last 24h in markdown
+uv run ha-tools history sensor.temperature --timeframe 7d      # Last 7 days
+uv run ha-tools history sensor.temperature --stats             # With min/max/avg
+uv run ha-tools history switch.light --stats                   # State change counts
+uv run ha-tools history sensor.temperature --format json       # JSON output
+uv run ha-tools history sensor.temperature --format csv -l -1  # Full CSV export
+
 # Error diagnostics
 uv run ha-tools errors --current                              # Current runtime errors
 uv run ha-tools errors --log 24h --entity "heizung"           # Entity-specific errors (substring match)
