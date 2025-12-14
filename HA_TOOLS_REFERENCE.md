@@ -49,12 +49,14 @@ ha-tools validate --syntax-only  # Quick YAML syntax check (instant)
 - `relations`: areas, groups, device relationships
 
 **Search Patterns:**
-- Wildcards: `temp_*`, `heizung*`, `light.*living*`
-- Domains: `sensor.*`, `automation.*`, `binary_sensor.*`
+- Substring matching: `temp`, `heizung`, `living`
+- Match anywhere in entity ID: `--search "sensor"` matches all sensor entities
 
 **History Timeframes:**
-- Relative: `24h`, `7d`, `30d`
-- Samples: `last:10`, `samples:50`
+- `Nh` - hours (e.g., `24h`)
+- `Nd` - days (e.g., `7d`)
+- `Nm` - minutes (e.g., `30m`)
+- `Nw` - weeks (e.g., `2w`)
 - Long-term: `365d` (via database statistics)
 
 **Usage Examples:**
@@ -62,17 +64,20 @@ ha-tools validate --syntax-only  # Quick YAML syntax check (instant)
 # Basic entity discovery
 ha-tools entities
 
-# Find temperature sensors
-ha-tools entities --search "temp_*"
+# Find temperature sensors (substring matching)
+ha-tools entities --search "temp"
 
 # Heating system analysis with history
-ha-tools entities --search "heizung*" --include history --history 7d
+ha-tools entities --search "heizung" --include history --history 7d
 
 # Current state with full attributes
-ha-tools entities --include state --search "sensor.*temperature*"
+ha-tools entities --include state --search "temperature"
 
 # Long-term trends (365+ days)
 ha-tools entities --include history --history 365d
+
+# Enable verbose output for debugging
+ha-tools entities --search "sensor" --verbose
 ```
 
 **Performance:**
@@ -90,14 +95,17 @@ ha-tools entities --include history --history 365d
 # Current runtime errors
 ha-tools errors --current
 
-# Error history for heating system
-ha-tools errors --entity "heizung*" --log 24h
+# Error history for heating system (substring matching)
+ha-tools errors --entity "heizung" --log 24h
 
 # Full error analysis
 ha-tools errors --log 7d
 
 # Specific entity error correlation
-ha-tools errors --entity "sensor.temperature_living" --current
+ha-tools errors --entity "temperature_living" --current
+
+# Verbose output for debugging connectivity
+ha-tools errors --current --verbose
 ```
 
 **Expected Output:**
@@ -118,8 +126,8 @@ ha-tools validate --syntax-only
 # 2. Validate changes
 ha-tools validate
 
-# 3. Check affected entities
-ha-tools entities --search "modified_area*" --include state
+# 3. Check affected entities (substring matching)
+ha-tools entities --search "modified_area" --include state
 
 # 4. Human reviews and deploys...
 
@@ -131,26 +139,26 @@ ha-tools errors --current
 ```bash
 # User: "Heating automation stopped working"
 
-# 1. Check entity behavior history
-ha-tools entities --search "heizung*" --include history --history 24h
+# 1. Check entity behavior history (use --verbose for timing)
+ha-tools entities --search "heizung" --include history --history 24h --verbose
 
 # 2. Look for related errors
-ha-tools errors --entity "heizung*" --log 24h
+ha-tools errors --entity "heizung" --log 24h
 
 # 3. Analyze automation dependencies
-ha-tools entities --include relations --search "automation.heating*"
+ha-tools entities --include relations --search "automation.heating"
 ```
 
 ### Entity Discovery
 ```bash
-# What temperature sensors exist?
-ha-tools entities --search "temp_*"
+# What temperature sensors exist? (substring matching)
+ha-tools entities --search "temp"
 
 # How are entities organized?
 ha-tools entities --include relations
 
-# What entities are in packages?
-ha-tools entities --search "*living*" --include history --history 7d
+# What entities are in a specific area?
+ha-tools entities --search "living" --include history --history 7d
 ```
 
 ## Performance Architecture

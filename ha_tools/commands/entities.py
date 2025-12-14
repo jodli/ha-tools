@@ -28,7 +28,7 @@ def entities_command(
         None,
         "--search",
         "-s",
-        help="Search pattern (supports wildcards like temp_*)"
+        help="Search pattern for entity IDs (substring matching)"
     ),
     include: Optional[str] = typer.Option(
         None,
@@ -40,7 +40,7 @@ def entities_command(
         None,
         "--history",
         "-h",
-        help="History timeframe (e.g., 24h, 7d, 1m) - requires database access"
+        help="History timeframe: Nh (hours), Nd (days), Nm (minutes), Nw (weeks)"
     ),
     limit: Optional[int] = typer.Option(
         100,
@@ -63,9 +63,9 @@ def entities_command(
 
     Examples:
         ha-tools entities
-        ha-tools entities --search "temp_*" --include history --history 24h
+        ha-tools entities --search "temp" --include history --history 24h
         ha-tools entities --include state,relations
-        ha-tools entities --search "sensor.*" --format json
+        ha-tools entities --search "sensor" --format json
     """
     try:
         exit_code = asyncio.run(_run_entities_command(search, include, history, limit, format))

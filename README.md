@@ -53,15 +53,26 @@ uv run ha-tools validate
 # Entity discovery
 uv run ha-tools entities
 
-# Search entities with history
-uv run ha-tools entities --search "temp_*" --include history --history 24h
+# Search entities with history (substring matching)
+uv run ha-tools entities --search "temp" --include history --history 24h
 
 # Error analysis
 uv run ha-tools errors --current
 
 # Historical error analysis with correlation
 uv run ha-tools errors --log 24h --correlation
+
+# Enable verbose output for debugging
+uv run ha-tools entities --verbose
 ```
+
+## Timeframe Formats
+
+All timeframe options (`--history`, `--log`) support:
+- `Nh` - hours (e.g., `24h`)
+- `Nd` - days (e.g., `7d`)
+- `Nm` - minutes (e.g., `30m`)
+- `Nw` - weeks (e.g., `2w`)
 
 ## Architecture
 
@@ -74,7 +85,7 @@ uv run ha-tools errors --log 24h --correlation
 ### Command Structure
 
 - **Validate**: Syntax checking + semantic validation via Home Assistant API
-- **Entities**: Search, filter, and analyze entities with optional historical data
+- **Entities**: Search (substring matching), filter, and analyze entities with optional historical data
 - **Errors**: Multi-source error analysis with correlation to entity state changes
 
 ## Performance Targets
@@ -102,8 +113,12 @@ database:
 
 ha_config_path: "/config"
 output_format: "markdown"
-verbose: false
 ```
+
+## Global Options
+
+- `--verbose` / `-v`: Enable detailed output showing timing, API calls, and intermediate steps
+- `--limit` / `-l`: Maximum entities to return (default: 100)
 
 ## Development
 

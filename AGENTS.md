@@ -27,7 +27,7 @@ You have three primary commands. Use them as your eyes and ears.
 ### `ha-tools entities`
 *Your knowledge base. Use this to explore.*
 - `ha-tools entities`: List all entities.
-- `ha-tools entities --search "pattern"`: Find specific entities (supports wildcards).
+- `ha-tools entities --search "pattern"`: Find specific entities (substring matching).
 - `ha-tools entities --include history --history 24h`: **CRITICAL** for debugging. Shows what happened recently.
 - `ha-tools entities --include relations`: Shows how entities connect (areas, groups).
 
@@ -35,6 +35,9 @@ You have three primary commands. Use them as your eyes and ears.
 *Your diagnostic scanner.*
 - `ha-tools errors --current`: Show errors from the current session.
 - `ha-tools errors --entity "pattern" --log 24h`: Find errors related to a specific entity over time.
+
+### Global Options
+- `--verbose`: Enable detailed output (timing, API calls, debug info). Use when debugging performance or connectivity issues.
 
 ## 3. Standard Operating Protocols
 
@@ -50,7 +53,7 @@ You have three primary commands. Use them as your eyes and ears.
     *If this fails, fix the syntax immediately. Do not proceed.*
 4.  **Impact Analysis**:
     ```bash
-    ha-tools entities --search "modified_entity_name" --include state
+    ha-tools entities --search "modified_entity_name" --include state  # substring match
     ```
     *Verify the entity is in the expected state (if applicable).*
 5.  **Final Validation**:
@@ -62,9 +65,9 @@ You have three primary commands. Use them as your eyes and ears.
 ### Protocol B: Debugging Issues
 *When the user reports "Something is not working".*
 
-1.  **Gather History**:
+1.  **Gather History** (use `--verbose` for timing details):
     ```bash
-    ha-tools entities --search "problematic_entity" --include history --history 24h
+    ha-tools entities --search "problematic_entity" --include history --history 24h --verbose
     ```
     *Look for anomalies in the state history.*
 2.  **Check Errors**:
@@ -77,6 +80,8 @@ You have three primary commands. Use them as your eyes and ears.
     ha-tools entities --include relations --search "problematic_entity"
     ```
     *Check if related entities (automations, scripts) are also failing.*
+
+**Timeframe formats**: `Nh` (hours), `Nd` (days), `Nm` (minutes), `Nw` (weeks)
 
 ## 4. Best Practices
 
