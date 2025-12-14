@@ -17,7 +17,7 @@ You are responsible for managing, validating, and debugging a Home Assistant ins
 
 ## 2. Tooling Reference
 
-You have three primary commands. Use them as your eyes and ears.
+You have four primary commands. Use them as your eyes and ears.
 
 ### `ha-tools validate`
 *Your safety net. Run this often.*
@@ -35,6 +35,14 @@ You have three primary commands. Use them as your eyes and ears.
 *Your diagnostic scanner.*
 - `ha-tools errors --current`: Show errors from the current session.
 - `ha-tools errors --entity "pattern" --log 24h`: Find errors related to a specific entity over time.
+
+### `ha-tools history`
+*Deep-dive into a single entity's past.*
+- `ha-tools history sensor.temperature`: Last 24h of state changes.
+- `ha-tools history sensor.temperature --timeframe 7d`: Custom timeframe.
+- `ha-tools history sensor.temperature --stats`: Include min/max/avg statistics.
+- `ha-tools history switch.light --stats`: State change counts for binary entities.
+- `ha-tools history sensor.temperature --format csv -l -1`: Full CSV export.
 
 ### Global Options
 - `--verbose`: Enable detailed output (timing, API calls, debug info). Use when debugging performance or connectivity issues.
