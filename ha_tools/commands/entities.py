@@ -17,7 +17,7 @@ from ..config import HaToolsConfig
 from ..lib.database import DatabaseManager
 from ..lib.rest_api import HomeAssistantAPI
 from ..lib.registry import RegistryManager
-from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp, print_verbose, print_verbose_timing
+from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp, print_verbose, print_verbose_timing, is_verbose
 from ..lib.utils import parse_timeframe
 
 console = Console()
@@ -210,9 +210,19 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
         # History fetching (if needed)
         if "history" in include_options and history_timeframe:
             try:
-                history_records = await db.get_entity_states(
-                    entity_data["entity_id"], history_timeframe, None, 10
+                # Use include_stats in verbose mode to show query performance info
+                result = await db.get_entity_states(
+                    entity_data["entity_id"], history_timeframe, None, 10,
+                    include_stats=is_verbose()
                 )
+                if is_verbose() and isinstance(result, tuple):
+                    history_records, stats = result
+                    total = stats.get("total_records", 0)
+                    filtered = stats.get("filtered_count", 0)
+                    query_ms = stats.get("query_time_ms", 0)
+                    print_verbose(f"  {entity_data['entity_id']}: {total:,} total records, {filtered} in timeframe, query: {query_ms:.1f}ms")
+                else:
+                    history_records = result
                 entity_data["history"] = history_records
                 entity_data["history_count"] = len(history_records)
             except Exception as e:
@@ -374,6 +384,13 @@ def _output_markdown_format(entities_data: List[dict], include_options: set[str]
             # History information
             if "history" in include_options and "history_count" in entity:
                 details.append(f"**History Records:** {entity['history_count']}")
+                # Include actual history data
+                if entity.get("history"):
+                    details.append("\n**Recent History:**")
+                    for record in entity["history"]:
+                        state = record.get("state", "N/A")
+                        last_changed = format_timestamp(record.get("last_changed"))
+                        details.append(f"- `{state}` at {last_changed}")
 
             # Relations
             if "relations" in include_options and "relations" in entity:

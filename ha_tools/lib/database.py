@@ -198,36 +198,57 @@ class DatabaseManager:
     async def get_entity_states(self, entity_id: Optional[str] = None,
                                start_time: Optional[datetime] = None,
                                end_time: Optional[datetime] = None,
-                               limit: Optional[int] = None) -> List[Dict[str, Any]]:
+                               limit: Optional[int] = None,
+                               include_stats: bool = False) -> List[Dict[str, Any]] | tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Get entity state history from database.
 
         This is the core method for fast history queries, achieving 10-15x
         performance improvement over REST API.
+
+        If include_stats=True, returns (results, stats_dict) where stats_dict contains:
+        - total_records: Total state records for this entity (unfiltered)
+        - query_time_ms: Time taken for the query
         """
         if not self.is_connected():
             # Return empty result when database is not available
+            if include_stats:
+                return [], {"total_records": 0, "query_time_ms": 0}
             return []
 
         if self._database_type == "sqlite":
-            return await self._get_entity_states_sqlite(entity_id, start_time, end_time, limit)
+            return await self._get_entity_states_sqlite(entity_id, start_time, end_time, limit, include_stats)
         elif self._database_type == "mysql":
-            return await self._get_entity_states_mysql(entity_id, start_time, end_time, limit)
+            return await self._get_entity_states_mysql(entity_id, start_time, end_time, limit, include_stats)
         elif self._database_type == "postgresql":
-            return await self._get_entity_states_postgresql(entity_id, start_time, end_time, limit)
+            return await self._get_entity_states_postgresql(entity_id, start_time, end_time, limit, include_stats)
 
     async def _get_entity_states_sqlite(self, entity_id: Optional[str],
                                        start_time: Optional[datetime],
                                        end_time: Optional[datetime],
-                                       limit: Optional[int]) -> List[Dict[str, Any]]:
+                                       limit: Optional[int],
+                                       include_stats: bool = False) -> List[Dict[str, Any]] | tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """Get entity states from SQLite database (modern schema with states_meta)."""
-        query = """
+        import time as time_module
+
+        start_query_time = time_module.time()
+
+        # When include_stats=True, add count fields
+        if include_stats and entity_id and '*' not in entity_id:
+            count_select = """, COUNT(*) OVER() as _filtered_count,
+                (SELECT COUNT(*) FROM states s2
+                 INNER JOIN states_meta sm2 ON s2.metadata_id = sm2.metadata_id
+                 WHERE sm2.entity_id = sm.entity_id) as _total_records"""
+        else:
+            count_select = ""
+
+        query = f"""
         SELECT
             sm.entity_id,
             s.state,
             datetime(COALESCE(s.last_changed_ts, s.last_updated_ts), 'unixepoch') as last_changed,
             datetime(s.last_updated_ts, 'unixepoch') as last_updated,
-            sa.shared_attrs as attributes
+            sa.shared_attrs as attributes{count_select}
         FROM states s
         INNER JOIN states_meta sm ON s.metadata_id = sm.metadata_id
         LEFT JOIN state_attributes sa ON s.attributes_id = sa.attributes_id
@@ -245,36 +266,68 @@ class DatabaseManager:
                 params.append(entity_id)
 
         if start_time:
-            conditions.append("COALESCE(s.last_changed_ts, s.last_updated_ts) >= ?")
+            # Use last_updated_ts directly - it's always set and allows index usage
+            conditions.append("s.last_updated_ts >= ?")
             params.append(start_time.timestamp())
 
         if end_time:
-            conditions.append("COALESCE(s.last_changed_ts, s.last_updated_ts) <= ?")
+            conditions.append("s.last_updated_ts <= ?")
             params.append(end_time.timestamp())
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += " ORDER BY COALESCE(s.last_changed_ts, s.last_updated_ts) DESC"
+        query += " ORDER BY s.last_updated_ts DESC"
 
         if limit:
             query += " LIMIT ?"
             params.append(limit)
 
-        return await self.execute_query(query, tuple(params))
+        results = await self.execute_query(query, tuple(params))
+        query_time_ms = (time_module.time() - start_query_time) * 1000
+
+        if include_stats:
+            stats = {
+                "total_records": results[0].get("_total_records", 0) if results else 0,
+                "filtered_count": results[0].get("_filtered_count", 0) if results else 0,
+                "query_time_ms": query_time_ms
+            }
+            # Remove stats fields from results
+            for row in results:
+                row.pop("_total_records", None)
+                row.pop("_filtered_count", None)
+            return results, stats
+
+        return results
 
     async def _get_entity_states_mysql(self, entity_id: Optional[str],
                                      start_time: Optional[datetime],
                                      end_time: Optional[datetime],
-                                     limit: Optional[int]) -> List[Dict[str, Any]]:
+                                     limit: Optional[int],
+                                     include_stats: bool = False) -> List[Dict[str, Any]] | tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """Get entity states from MySQL database (modern schema with states_meta)."""
-        query = """
+        import time as time_module
+
+        start_query_time = time_module.time()
+
+        # When include_stats=True, add:
+        # - COUNT(*) OVER() for filtered count (records matching time filter, before LIMIT)
+        # - Subquery for total records (all records for this entity, explains slow queries)
+        if include_stats and entity_id and '*' not in entity_id:
+            count_select = """, COUNT(*) OVER() as _filtered_count,
+                (SELECT COUNT(*) FROM states s2
+                 INNER JOIN states_meta sm2 ON s2.metadata_id = sm2.metadata_id
+                 WHERE sm2.entity_id = sm.entity_id) as _total_records"""
+        else:
+            count_select = ""
+
+        query = f"""
         SELECT
             sm.entity_id,
             s.state,
             FROM_UNIXTIME(COALESCE(s.last_changed_ts, s.last_updated_ts)) as last_changed,
             FROM_UNIXTIME(s.last_updated_ts) as last_updated,
-            sa.shared_attrs as attributes
+            sa.shared_attrs as attributes{count_select}
         FROM states s
         INNER JOIN states_meta sm ON s.metadata_id = sm.metadata_id
         LEFT JOIN state_attributes sa ON s.attributes_id = sa.attributes_id
@@ -292,36 +345,67 @@ class DatabaseManager:
                 params.append(entity_id)
 
         if start_time:
-            conditions.append("COALESCE(s.last_changed_ts, s.last_updated_ts) >= %s")
+            # Use last_updated_ts directly - it's always set and allows index usage
+            # (COALESCE prevents index usage, causing full table scans)
+            conditions.append("s.last_updated_ts >= %s")
             params.append(start_time.timestamp())
 
         if end_time:
-            conditions.append("COALESCE(s.last_changed_ts, s.last_updated_ts) <= %s")
+            conditions.append("s.last_updated_ts <= %s")
             params.append(end_time.timestamp())
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += " ORDER BY COALESCE(s.last_changed_ts, s.last_updated_ts) DESC"
+        query += " ORDER BY s.last_updated_ts DESC"
 
         if limit:
             query += " LIMIT %s"
             params.append(limit)
 
-        return await self.execute_query(query, tuple(params))
+        results = await self.execute_query(query, tuple(params))
+        query_time_ms = (time_module.time() - start_query_time) * 1000
+
+        if include_stats:
+            stats = {
+                "total_records": results[0].get("_total_records", 0) if results else 0,
+                "filtered_count": results[0].get("_filtered_count", 0) if results else 0,
+                "query_time_ms": query_time_ms
+            }
+            # Remove stats fields from results
+            for row in results:
+                row.pop("_total_records", None)
+                row.pop("_filtered_count", None)
+            return results, stats
+
+        return results
 
     async def _get_entity_states_postgresql(self, entity_id: Optional[str],
                                           start_time: Optional[datetime],
                                           end_time: Optional[datetime],
-                                          limit: Optional[int]) -> List[Dict[str, Any]]:
+                                          limit: Optional[int],
+                                          include_stats: bool = False) -> List[Dict[str, Any]] | tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """Get entity states from PostgreSQL database (modern schema with states_meta)."""
-        query = """
+        import time as time_module
+
+        start_query_time = time_module.time()
+
+        # When include_stats=True, add count fields
+        if include_stats and entity_id and '*' not in entity_id:
+            count_select = """, COUNT(*) OVER() as _filtered_count,
+                (SELECT COUNT(*) FROM states s2
+                 INNER JOIN states_meta sm2 ON s2.metadata_id = sm2.metadata_id
+                 WHERE sm2.entity_id = sm.entity_id) as _total_records"""
+        else:
+            count_select = ""
+
+        query = f"""
         SELECT
             sm.entity_id,
             s.state,
             to_timestamp(COALESCE(s.last_changed_ts, s.last_updated_ts)) as last_changed,
             to_timestamp(s.last_updated_ts) as last_updated,
-            sa.shared_attrs as attributes
+            sa.shared_attrs as attributes{count_select}
         FROM states s
         INNER JOIN states_meta sm ON s.metadata_id = sm.metadata_id
         LEFT JOIN state_attributes sa ON s.attributes_id = sa.attributes_id
@@ -342,25 +426,41 @@ class DatabaseManager:
                 param_idx += 1
 
         if start_time:
-            conditions.append(f"COALESCE(s.last_changed_ts, s.last_updated_ts) >= ${param_idx}")
+            # Use last_updated_ts directly - it's always set and allows index usage
+            conditions.append(f"s.last_updated_ts >= ${param_idx}")
             params.append(start_time.timestamp())
             param_idx += 1
 
         if end_time:
-            conditions.append(f"COALESCE(s.last_changed_ts, s.last_updated_ts) <= ${param_idx}")
+            conditions.append(f"s.last_updated_ts <= ${param_idx}")
             params.append(end_time.timestamp())
             param_idx += 1
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += " ORDER BY COALESCE(s.last_changed_ts, s.last_updated_ts) DESC"
+        query += " ORDER BY s.last_updated_ts DESC"
 
         if limit:
             query += f" LIMIT ${param_idx}"
             params.append(limit)
 
-        return await self.execute_query(query, tuple(params))
+        results = await self.execute_query(query, tuple(params))
+        query_time_ms = (time_module.time() - start_query_time) * 1000
+
+        if include_stats:
+            stats = {
+                "total_records": results[0].get("_total_records", 0) if results else 0,
+                "filtered_count": results[0].get("_filtered_count", 0) if results else 0,
+                "query_time_ms": query_time_ms
+            }
+            # Remove stats fields from results
+            for row in results:
+                row.pop("_total_records", None)
+                row.pop("_filtered_count", None)
+            return results, stats
+
+        return results
 
     async def get_entity_statistics(self, entity_id: Optional[str] = None,
                                    statistic_type: Optional[str] = None,
