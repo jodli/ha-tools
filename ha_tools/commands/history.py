@@ -28,6 +28,19 @@ from ..lib.output import (
 )
 from ..lib.utils import parse_timeframe
 
+# Default Home Assistant attributes to exclude from CSV output
+# These are system attributes that rarely change or contain useful data for analysis
+HA_DEFAULT_ATTRIBUTES = {
+    "friendly_name",
+    "icon",
+    "entity_picture",
+    "assumed_state",
+    "unit_of_measurement",
+    "attribution",
+    "device_class",
+    "supported_features",
+}
+
 
 def history_command(
     entity_id: str = typer.Argument(
@@ -295,7 +308,8 @@ def _output_csv_format(states: List[Dict[str, Any]]) -> None:
         else:
             attrs = attrs_raw or {}
         parsed_attrs.append(attrs)
-        all_attr_keys.update(attrs.keys())
+        # Exclude default HA attributes - only include entity-specific attributes
+        all_attr_keys.update(k for k in attrs.keys() if k not in HA_DEFAULT_ATTRIBUTES)
 
     # Sort attribute keys for consistent column order
     attr_keys = sorted(all_attr_keys)
