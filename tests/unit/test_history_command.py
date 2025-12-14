@@ -79,19 +79,19 @@ class TestOutputFormats:
     """Tests for output formatting functions."""
 
     def test_csv_output_with_attributes(self, capsys):
-        """Test CSV output includes dynamic attribute columns."""
+        """Test CSV output includes entity-specific attribute columns."""
         states = [
             {
                 "last_updated": "2024-01-01T12:00:00",
                 "state": "20.0",
                 "last_changed": "2024-01-01T12:00:00",
-                "attributes": '{"unit_of_measurement": "°C", "friendly_name": "Temp"}'
+                "attributes": '{"state_class": "measurement", "min_temp": 15}'
             },
             {
                 "last_updated": "2024-01-01T13:00:00",
                 "state": "21.0",
                 "last_changed": "2024-01-01T13:00:00",
-                "attributes": '{"unit_of_measurement": "°C"}'
+                "attributes": '{"state_class": "measurement"}'
             },
         ]
 
@@ -100,12 +100,12 @@ class TestOutputFormats:
         captured = capsys.readouterr()
         lines = captured.out.strip().split("\n")
 
-        # Check headers include attribute columns (strip \r from line endings)
+        # Check headers include entity-specific attribute columns
         headers = [h.strip() for h in lines[0].split(",")]
         assert "timestamp" in headers
         assert "state" in headers
-        assert "attr_unit_of_measurement" in headers
-        assert "attr_friendly_name" in headers
+        assert "attr_state_class" in headers
+        assert "attr_min_temp" in headers
 
     def test_csv_output_empty(self, capsys):
         """Test CSV output with empty states."""
@@ -120,7 +120,7 @@ class TestOutputFormats:
                 "last_updated": "2024-01-01T12:00:00",
                 "state": "20.0",
                 "last_changed": "2024-01-01T12:00:00",
-                "attributes": {"unit_of_measurement": "°C"}
+                "attributes": {"state_class": "measurement"}
             },
         ]
 
@@ -129,6 +129,44 @@ class TestOutputFormats:
         captured = capsys.readouterr()
         lines = captured.out.strip().split("\n")
         assert len(lines) == 2  # header + 1 data row
+
+    def test_csv_output_excludes_default_ha_attributes(self, capsys):
+        """Test CSV output excludes default HA attributes."""
+        states = [
+            {
+                "last_updated": "2024-01-01T12:00:00",
+                "state": "20.0",
+                "last_changed": "2024-01-01T12:00:00",
+                "attributes": json.dumps({
+                    # Default HA attributes (should be excluded)
+                    "friendly_name": "Temperature Sensor",
+                    "icon": "mdi:thermometer",
+                    "unit_of_measurement": "°C",
+                    "device_class": "temperature",
+                    "supported_features": 0,
+                    # Entity-specific attributes (should be included)
+                    "state_class": "measurement",
+                    "last_reset": None,
+                })
+            },
+        ]
+
+        _output_csv_format(states)
+
+        captured = capsys.readouterr()
+        lines = captured.out.strip().split("\n")
+        headers = [h.strip() for h in lines[0].split(",")]
+
+        # Default HA attributes should NOT be in headers
+        assert "attr_friendly_name" not in headers
+        assert "attr_icon" not in headers
+        assert "attr_unit_of_measurement" not in headers
+        assert "attr_device_class" not in headers
+        assert "attr_supported_features" not in headers
+
+        # Entity-specific attributes should be in headers
+        assert "attr_state_class" in headers
+        assert "attr_last_reset" in headers
 
     def test_json_output_structure(self, capsys):
         """Test JSON output has correct structure."""
