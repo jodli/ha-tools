@@ -633,10 +633,10 @@ uv run ha-tools history sensor.temperature --format csv -l -1  # Full CSV export
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] All existing tests pass: `uv run pytest`
-- [ ] New unit tests pass: `uv run pytest tests/unit/test_history_command.py -v`
+- [x] All existing tests pass: `uv run pytest`
+- [x] New unit tests pass: `uv run pytest tests/unit/test_history_command.py -v`
 - [ ] Type checking passes (if configured)
-- [ ] Command help works: `uv run ha-tools history --help`
+- [x] Command help works: `uv run ha-tools history --help`
 
 #### Manual Verification:
 - [ ] `uv run ha-tools history sensor.temperature` returns markdown output
