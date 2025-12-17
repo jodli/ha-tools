@@ -493,3 +493,125 @@ class TestEntitiesCommand:
             assert "History Count" in call_args
             assert "Detailed Information" in call_args
 
+
+class TestMultiPatternSearch:
+    """Test multi-pattern search functionality."""
+
+    def test_search_single_pattern(self):
+        """Test single pattern search (backward compatibility)."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"},
+            {"entity_id": "sensor.humidity", "friendly_name": "Humidity"},
+            {"entity_id": "switch.light", "friendly_name": "Light"},
+        ]
+
+        # Call the real method
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        results = registry.search_entities("temp")
+        assert len(results) == 1
+        assert results[0]["entity_id"] == "sensor.temperature"
+
+    def test_search_multiple_patterns(self):
+        """Test multiple patterns with | separator."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"},
+            {"entity_id": "sensor.humidity", "friendly_name": "Humidity"},
+            {"entity_id": "switch.light", "friendly_name": "Light"},
+        ]
+
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        results = registry.search_entities("temp|humidity")
+        assert len(results) == 2
+        entity_ids = [r["entity_id"] for r in results]
+        assert "sensor.temperature" in entity_ids
+        assert "sensor.humidity" in entity_ids
+
+    def test_search_patterns_with_spaces(self):
+        """Test patterns with spaces around |."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "sensor.living_room_temp", "friendly_name": "Living Room"},
+            {"entity_id": "sensor.bedroom_temp", "friendly_name": "Bedroom"},
+        ]
+
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        results = registry.search_entities("living | bedroom")
+        assert len(results) == 2
+
+    def test_search_empty_patterns_filtered(self):
+        """Test that empty patterns are filtered out."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"},
+        ]
+
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        # Empty patterns between pipes should be ignored
+        results = registry.search_entities("|temp|")
+        assert len(results) == 1
+        assert results[0]["entity_id"] == "sensor.temperature"
+
+    def test_search_all_empty_patterns(self):
+        """Test that all-empty patterns return empty list."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"},
+        ]
+
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        results = registry.search_entities("|||")
+        assert len(results) == 0
+
+    def test_search_case_insensitive(self):
+        """Test that multi-pattern search is case insensitive."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "sensor.Temperature", "friendly_name": "TEMP Sensor"},
+        ]
+
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        results = registry.search_entities("TEMP|temperature")
+        assert len(results) == 1
+
+    def test_search_no_duplicates(self):
+        """Test that entities matching multiple patterns appear only once."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "sensor.temp_humidity", "friendly_name": "Temp and Humidity"},
+        ]
+
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        # Entity matches both patterns but should only appear once
+        results = registry.search_entities("temp|humidity")
+        assert len(results) == 1
+
