@@ -201,22 +201,35 @@ class RegistryManager:
         ]
 
     def search_entities(self, pattern: str, search_fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """Search entities by pattern."""
+        """Search entities by pattern.
+
+        Supports multiple patterns separated by | (OR matching).
+        Example: "temp|humidity" matches entities containing "temp" OR "humidity".
+        """
         if not self._entity_registry:
             return []
 
         if search_fields is None:
             search_fields = ["entity_id", "friendly_name", "original_name"]
 
-        pattern_lower = pattern.lower().replace("*", "")
+        # Split on | for OR matching, strip whitespace and wildcards from each pattern
+        patterns = [p.strip().lower().replace("*", "") for p in pattern.split("|")]
+        patterns = [p for p in patterns if p]  # Remove empty patterns
+
+        if not patterns:
+            return []
+
         results = []
 
         for entity in self._entity_registry:
             for field in search_fields:
                 value = entity.get(field, "")
-                if value and pattern_lower in value.lower():
-                    results.append(entity)
-                    break
+                if value:
+                    value_lower = value.lower()
+                    # Match if ANY pattern matches
+                    if any(p in value_lower for p in patterns):
+                        results.append(entity)
+                        break
 
         return results
 

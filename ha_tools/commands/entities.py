@@ -28,7 +28,7 @@ def entities_command(
         None,
         "--search",
         "-s",
-        help="Search pattern for entity IDs (substring matching)"
+        help="Search pattern (substring matching). Use | for multiple patterns: 'temp|humidity'"
     ),
     include: Optional[str] = typer.Option(
         None,
