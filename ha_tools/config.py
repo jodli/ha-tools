@@ -4,15 +4,14 @@ Configuration management for ha-tools.
 Uses Pydantic for type-safe configuration management with environment variable support.
 """
 
-import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Module-level variable for custom config path
-_custom_config_path: Optional[Path] = None
+_custom_config_path: Path | None = None
 
 
 class DatabaseConfig(BaseModel):
@@ -20,7 +19,7 @@ class DatabaseConfig(BaseModel):
 
     url: str = Field(
         ...,
-        description="Database URL (e.g., mysql://user:pass@host/db, postgresql://..., sqlite:///path)"
+        description="Database URL (e.g., mysql://user:pass@host/db, postgresql://..., sqlite:///path)",
     )
     pool_size: int = Field(default=10, description="Connection pool size")
     max_overflow: int = Field(default=20, description="Maximum connection overflow")
@@ -34,7 +33,9 @@ class DatabaseConfig(BaseModel):
             raise ValueError("Database URL is required")
 
         # Basic URL format validation
-        if not any(prefix in v for prefix in ["mysql://", "postgresql://", "sqlite:///"]):
+        if not any(
+            prefix in v for prefix in ["mysql://", "postgresql://", "sqlite:///"]
+        ):
             raise ValueError(
                 "Database URL must start with mysql://, postgresql://, or sqlite:///"
             )
@@ -45,13 +46,9 @@ class HomeAssistantConfig(BaseModel):
     """Home Assistant REST API configuration."""
 
     url: str = Field(
-        ...,
-        description="Home Assistant URL (e.g., http://localhost:8123)"
+        ..., description="Home Assistant URL (e.g., http://localhost:8123)"
     )
-    access_token: str = Field(
-        ...,
-        description="Long-lived access token"
-    )
+    access_token: str = Field(..., description="Long-lived access token")
     timeout: int = Field(default=30, description="API request timeout in seconds")
 
     @field_validator("url")
@@ -74,26 +71,24 @@ class HomeAssistantConfig(BaseModel):
 class HaToolsConfig(BaseSettings):
     """Main configuration for ha-tools."""
 
-    home_assistant: HomeAssistantConfig = Field(..., description="Home Assistant configuration")
+    home_assistant: HomeAssistantConfig = Field(
+        ..., description="Home Assistant configuration"
+    )
     database: DatabaseConfig = Field(..., description="Database configuration")
     ha_config_path: str = Field(
-        default="/config",
-        description="Path to Home Assistant configuration directory"
+        default="/config", description="Path to Home Assistant configuration directory"
     )
     output_format: str = Field(
-        default="markdown",
-        description="Output format (markdown, json, table)"
+        default="markdown", description="Output format (markdown, json, table)"
     )
     verbose: bool = Field(default=False, description="Enable verbose logging")
 
-    model_config = ConfigDict(
-        env_prefix="HA_TOOLS_",
-        env_file=".env",
-        env_nested_delimiter="__"
+    model_config = SettingsConfigDict(
+        env_prefix="HA_TOOLS_", env_file=".env", env_nested_delimiter="__"
     )
 
     @classmethod
-    def set_config_path(cls, path: Union[str, Path]) -> None:
+    def set_config_path(cls, path: str | Path) -> None:
         """Set custom configuration file path."""
         global _custom_config_path
         _custom_config_path = Path(path)
@@ -116,22 +111,26 @@ class HaToolsConfig(BaseSettings):
         if config_path.exists():
             try:
                 import yaml
-                with open(config_path, "r", encoding="utf-8") as f:
+
+                with open(config_path, encoding="utf-8") as f:
                     config_data = yaml.safe_load(f) or {}
                 return cls(**config_data)
             except Exception as e:
-                raise ValueError(f"Failed to load config from {config_path}: {e}")
+                raise ValueError(
+                    f"Failed to load config from {config_path}: {e}"
+                ) from e
         else:
             # Try to load from environment variables only
+            # pydantic-settings will populate required fields from env vars at runtime
             try:
-                return cls()
+                return cls()  # type: ignore[call-arg]
             except Exception as e:
                 raise ValueError(
                     f"No configuration file found at {config_path} and "
                     f"environment variables incomplete: {e}"
-                )
+                ) from e
 
-    def save(self, path: Optional[Union[str, Path]] = None) -> None:
+    def save(self, path: str | Path | None = None) -> None:
         """Save configuration to file."""
         import yaml
 
@@ -160,7 +159,7 @@ class HaToolsConfig(BaseSettings):
             if not file_path.exists():
                 raise ValueError(f"Required Home Assistant file not found: {file_path}")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary for API usage."""
         return self.model_dump()
 

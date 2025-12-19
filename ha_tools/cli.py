@@ -8,14 +8,16 @@ Uses hybrid REST API + database access for optimal performance.
 
 import asyncio
 import sys
-from typing import Optional
 
 import typer
-from rich import console
+from rich.console import Console
 from typer import Context
 
 from . import __version__
-from .commands import entities, errors, validate
+from .commands.entities import entities_command
+from .commands.errors import errors_command
+from .commands.history import history_command
+from .commands.validate import validate_command
 from .config import HaToolsConfig
 from .lib.output import print_error, print_success, set_verbose
 
@@ -30,7 +32,7 @@ app = typer.Typer(
 @app.callback(invoke_without_command=True)
 def callback(
     ctx: Context,
-    config: Optional[str] = typer.Option(
+    config: str | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -76,18 +78,13 @@ def callback(
         raise typer.Exit()
 
 
-# Import and add commands directly
-from .commands.entities import entities_command
-from .commands.errors import errors_command
-from .commands.history import history_command
-from .commands.validate import validate_command
-
+# Register command functions
 app.command(name="validate")(validate_command)
 app.command(name="entities")(entities_command)
 app.command(name="errors")(errors_command)
 app.command(name="history")(history_command)
 
-console = console.Console()
+console = Console()
 
 
 @app.command()
@@ -106,7 +103,7 @@ def setup() -> None:
         print_success("✓ Configuration setup completed successfully!")
     except Exception as e:
         print_error(f"Setup failed: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -135,13 +132,13 @@ def test_connection() -> None:
 
         except Exception as e:
             print_error(f"Connection test failed: {e}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     try:
         asyncio.run(_test())
     except KeyboardInterrupt:
         print_error("Connection test cancelled")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 def cli_main() -> None:

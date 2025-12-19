@@ -62,13 +62,13 @@ class HAYAMLLoader(yaml.SafeLoader):
 
 def _construct_stub(loader: HAYAMLLoader, tag: str, node: yaml.Node) -> str:
     """Return a stub value for any HA tag (used when not expanding)."""
-    value = loader.construct_scalar(node)
+    value = loader.construct_scalar(node)  # type: ignore[arg-type]
     return f"<{tag}:{value}>"
 
 
 def _construct_include(loader: HAYAMLLoader, node: yaml.Node) -> Any:
     """Handle !include tag."""
-    relative_path = loader.construct_scalar(node)
+    relative_path = loader.construct_scalar(node)  # type: ignore[arg-type]
 
     if not loader.expand_includes:
         return f"<!include:{relative_path}>"
@@ -79,7 +79,7 @@ def _construct_include(loader: HAYAMLLoader, node: yaml.Node) -> Any:
 
 def _construct_include_dir_list(loader: HAYAMLLoader, node: yaml.Node) -> Any:
     """Handle !include_dir_list tag - includes directory as list."""
-    relative_path = loader.construct_scalar(node)
+    relative_path = loader.construct_scalar(node)  # type: ignore[arg-type]
 
     if not loader.expand_includes:
         return f"<!include_dir_list:{relative_path}>"
@@ -90,7 +90,7 @@ def _construct_include_dir_list(loader: HAYAMLLoader, node: yaml.Node) -> Any:
 
 def _construct_include_dir_merge_list(loader: HAYAMLLoader, node: yaml.Node) -> Any:
     """Handle !include_dir_merge_list tag - merges files into single list."""
-    relative_path = loader.construct_scalar(node)
+    relative_path = loader.construct_scalar(node)  # type: ignore[arg-type]
 
     if not loader.expand_includes:
         return f"<!include_dir_merge_list:{relative_path}>"
@@ -101,7 +101,7 @@ def _construct_include_dir_merge_list(loader: HAYAMLLoader, node: yaml.Node) -> 
 
 def _construct_include_dir_named(loader: HAYAMLLoader, node: yaml.Node) -> Any:
     """Handle !include_dir_named tag - includes as dict (filename = key)."""
-    relative_path = loader.construct_scalar(node)
+    relative_path = loader.construct_scalar(node)  # type: ignore[arg-type]
 
     if not loader.expand_includes:
         return f"<!include_dir_named:{relative_path}>"
@@ -112,7 +112,7 @@ def _construct_include_dir_named(loader: HAYAMLLoader, node: yaml.Node) -> Any:
 
 def _construct_include_dir_merge_named(loader: HAYAMLLoader, node: yaml.Node) -> Any:
     """Handle !include_dir_merge_named tag - merges dicts from files."""
-    relative_path = loader.construct_scalar(node)
+    relative_path = loader.construct_scalar(node)  # type: ignore[arg-type]
 
     if not loader.expand_includes:
         return f"<!include_dir_merge_named:{relative_path}>"
@@ -123,7 +123,7 @@ def _construct_include_dir_merge_named(loader: HAYAMLLoader, node: yaml.Node) ->
 
 def _construct_secret(loader: HAYAMLLoader, node: yaml.Node) -> Any:
     """Handle !secret tag."""
-    secret_key = loader.construct_scalar(node)
+    secret_key = loader.construct_scalar(node)  # type: ignore[arg-type]
 
     if not loader.expand_includes:
         return f"<!secret:{secret_key}>"
@@ -135,7 +135,7 @@ def _construct_secret(loader: HAYAMLLoader, node: yaml.Node) -> Any:
 
 def _construct_env_var(loader: HAYAMLLoader, node: yaml.Node) -> Any:
     """Handle !env_var tag."""
-    env_var = loader.construct_scalar(node)
+    env_var = loader.construct_scalar(node)  # type: ignore[arg-type]
 
     if not loader.expand_includes:
         return f"<!env_var:{env_var}>"
@@ -164,7 +164,7 @@ def _load_yaml_file(loader: HAYAMLLoader, file_path: Path) -> Any:
 
     loader._include_stack.append(resolved_path)
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
 
         # Create a new loader for the included file
@@ -176,7 +176,7 @@ def _load_yaml_file(loader: HAYAMLLoader, file_path: Path) -> Any:
         )
         new_loader._include_stack = loader._include_stack
 
-        return yaml.load(content, Loader=lambda s: new_loader)
+        return yaml.load(content, Loader=lambda s: new_loader)  # type: ignore[arg-type]
     finally:
         loader._include_stack.pop()
 
@@ -233,7 +233,7 @@ def load_secrets(config_path: Path) -> dict[str, str]:
         return {}
 
     try:
-        with open(secrets_file, "r", encoding="utf-8") as f:
+        with open(secrets_file, encoding="utf-8") as f:
             content = yaml.safe_load(f)
             return content if isinstance(content, dict) else {}
     except yaml.YAMLError:
@@ -271,7 +271,7 @@ def load_yaml(
         expand_includes=expand_includes,
     )
 
-    return yaml.load(content, Loader=lambda s: loader)
+    return yaml.load(content, Loader=lambda s: loader)  # type: ignore[arg-type]
 
 
 def load_yaml_file(
@@ -289,7 +289,7 @@ def load_yaml_file(
     Returns:
         Parsed YAML content
     """
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         content = f.read()
 
     return load_yaml(

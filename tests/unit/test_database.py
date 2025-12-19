@@ -5,6 +5,7 @@ Tests only the core business logic, not external library mechanics.
 """
 
 import pytest
+
 from ha_tools.config import DatabaseConfig
 from ha_tools.lib.database import DatabaseManager
 
@@ -43,7 +44,9 @@ class TestDatabaseManagerCore:
 
     def test_parse_mysql_url_invalid(self):
         """Test invalid MySQL URL parsing."""
-        config = DatabaseConfig(url="mysql://user@host")  # Missing password and database
+        config = DatabaseConfig(
+            url="mysql://user@host"
+        )  # Missing password and database
         db = DatabaseManager(config)
 
         with pytest.raises(ValueError, match="Invalid MySQL URL format"):
@@ -51,7 +54,9 @@ class TestDatabaseManagerCore:
 
     def test_parse_postgresql_url(self):
         """Test PostgreSQL URL parsing."""
-        config = DatabaseConfig(url="postgresql://user:password@localhost:5432/database")
+        config = DatabaseConfig(
+            url="postgresql://user:password@localhost:5432/database"
+        )
         db = DatabaseManager(config)
 
         parsed = db._parse_postgresql_url()
@@ -63,7 +68,9 @@ class TestDatabaseManagerCore:
 
     def test_parse_postgresql_url_invalid(self):
         """Test invalid PostgreSQL URL parsing."""
-        config = DatabaseConfig(url="postgresql://user@host")  # Missing password and database
+        config = DatabaseConfig(
+            url="postgresql://user@host"
+        )  # Missing password and database
         db = DatabaseManager(config)
 
         with pytest.raises(ValueError, match="Invalid PostgreSQL URL format"):
@@ -72,10 +79,7 @@ class TestDatabaseManagerCore:
     def test_custom_config_values(self):
         """Test custom database configuration values."""
         config = DatabaseConfig(
-            url="sqlite:///test.db",
-            pool_size=20,
-            timeout=60,
-            max_overflow=40
+            url="sqlite:///test.db", pool_size=20, timeout=60, max_overflow=40
         )
         db = DatabaseManager(config)
 

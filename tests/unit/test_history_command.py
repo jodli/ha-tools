@@ -1,15 +1,16 @@
 """Unit tests for the history command."""
 
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from ha_tools.commands.history import (
-    _run_history_command,
     _compute_statistics,
     _output_csv_format,
     _output_json_format,
     _output_markdown_format,
+    _run_history_command,
 )
 
 
@@ -85,13 +86,13 @@ class TestOutputFormats:
                 "last_updated": "2024-01-01T12:00:00",
                 "state": "20.0",
                 "last_changed": "2024-01-01T12:00:00",
-                "attributes": '{"state_class": "measurement", "min_temp": 15}'
+                "attributes": '{"state_class": "measurement", "min_temp": 15}',
             },
             {
                 "last_updated": "2024-01-01T13:00:00",
                 "state": "21.0",
                 "last_changed": "2024-01-01T13:00:00",
-                "attributes": '{"state_class": "measurement"}'
+                "attributes": '{"state_class": "measurement"}',
             },
         ]
 
@@ -120,7 +121,7 @@ class TestOutputFormats:
                 "last_updated": "2024-01-01T12:00:00",
                 "state": "20.0",
                 "last_changed": "2024-01-01T12:00:00",
-                "attributes": {"state_class": "measurement"}
+                "attributes": {"state_class": "measurement"},
             },
         ]
 
@@ -137,17 +138,19 @@ class TestOutputFormats:
                 "last_updated": "2024-01-01T12:00:00",
                 "state": "20.0",
                 "last_changed": "2024-01-01T12:00:00",
-                "attributes": json.dumps({
-                    # Default HA attributes (should be excluded)
-                    "friendly_name": "Temperature Sensor",
-                    "icon": "mdi:thermometer",
-                    "unit_of_measurement": "°C",
-                    "device_class": "temperature",
-                    "supported_features": 0,
-                    # Entity-specific attributes (should be included)
-                    "state_class": "measurement",
-                    "last_reset": None,
-                })
+                "attributes": json.dumps(
+                    {
+                        # Default HA attributes (should be excluded)
+                        "friendly_name": "Temperature Sensor",
+                        "icon": "mdi:thermometer",
+                        "unit_of_measurement": "°C",
+                        "device_class": "temperature",
+                        "supported_features": 0,
+                        # Entity-specific attributes (should be included)
+                        "state_class": "measurement",
+                        "last_reset": None,
+                    }
+                ),
             },
         ]
 
@@ -199,7 +202,11 @@ class TestOutputFormats:
     def test_markdown_output_basic(self, capsys):
         """Test markdown output basic structure."""
         states = [
-            {"state": "20.0", "last_updated": "2024-01-01T12:00:00", "last_changed": "2024-01-01T12:00:00"}
+            {
+                "state": "20.0",
+                "last_updated": "2024-01-01T12:00:00",
+                "last_changed": "2024-01-01T12:00:00",
+            }
         ]
 
         _output_markdown_format(states, "sensor.test", "24h", None)
@@ -212,7 +219,11 @@ class TestOutputFormats:
     def test_markdown_output_with_numeric_stats(self, capsys):
         """Test markdown output with numeric statistics."""
         states = [
-            {"state": "20.0", "last_updated": "2024-01-01T12:00:00", "last_changed": "2024-01-01T12:00:00"}
+            {
+                "state": "20.0",
+                "last_updated": "2024-01-01T12:00:00",
+                "last_changed": "2024-01-01T12:00:00",
+            }
         ]
         stats_data = {
             "numeric": True,
@@ -220,7 +231,7 @@ class TestOutputFormats:
             "max": 22.0,
             "avg": 20.5,
             "numeric_count": 10,
-            "total_records": 10
+            "total_records": 10,
         }
 
         _output_markdown_format(states, "sensor.test", "24h", stats_data)
@@ -234,12 +245,16 @@ class TestOutputFormats:
     def test_markdown_output_with_state_counts(self, capsys):
         """Test markdown output with state count statistics."""
         states = [
-            {"state": "on", "last_updated": "2024-01-01T12:00:00", "last_changed": "2024-01-01T12:00:00"}
+            {
+                "state": "on",
+                "last_updated": "2024-01-01T12:00:00",
+                "last_changed": "2024-01-01T12:00:00",
+            }
         ]
         stats_data = {
             "numeric": False,
             "state_counts": {"on": 8, "off": 2},
-            "total_records": 10
+            "total_records": 10,
         }
 
         _output_markdown_format(states, "switch.test", "24h", stats_data)
@@ -251,7 +266,11 @@ class TestOutputFormats:
     def test_markdown_output_truncation(self, capsys):
         """Test markdown output truncates at 50 rows."""
         states = [
-            {"state": str(i), "last_updated": f"2024-01-01T{i:02d}:00:00", "last_changed": f"2024-01-01T{i:02d}:00:00"}
+            {
+                "state": str(i),
+                "last_updated": f"2024-01-01T{i:02d}:00:00",
+                "last_changed": f"2024-01-01T{i:02d}:00:00",
+            }
             for i in range(60)
         ]
 
@@ -269,13 +288,15 @@ class TestRunHistoryCommand:
         """Test handling when database is unavailable."""
         mock_db = AsyncMock()
         mock_db.is_connected = MagicMock(return_value=False)
-        mock_db.get_connection_error = MagicMock(return_value=Exception("Connection failed"))
+        mock_db.get_connection_error = MagicMock(
+            return_value=Exception("Connection failed")
+        )
 
-        with patch('ha_tools.commands.history.HaToolsConfig') as mock_config_class:
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
             mock_config = MagicMock()
             mock_config_class.load.return_value = mock_config
 
-            with patch('ha_tools.commands.history.DatabaseManager') as mock_db_class:
+            with patch("ha_tools.commands.history.DatabaseManager") as mock_db_class:
                 mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_db)
                 mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
@@ -284,7 +305,7 @@ class TestRunHistoryCommand:
                     timeframe="24h",
                     limit=100,
                     stats=False,
-                    format="markdown"
+                    format="markdown",
                 )
 
                 assert result == 4  # Database error exit code
@@ -295,11 +316,11 @@ class TestRunHistoryCommand:
         mock_db.is_connected = MagicMock(return_value=True)
         mock_db.get_entity_states.return_value = []
 
-        with patch('ha_tools.commands.history.HaToolsConfig') as mock_config_class:
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
             mock_config = MagicMock()
             mock_config_class.load.return_value = mock_config
 
-            with patch('ha_tools.commands.history.DatabaseManager') as mock_db_class:
+            with patch("ha_tools.commands.history.DatabaseManager") as mock_db_class:
                 mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_db)
                 mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
@@ -308,7 +329,7 @@ class TestRunHistoryCommand:
                     timeframe="24h",
                     limit=100,
                     stats=False,
-                    format="markdown"
+                    format="markdown",
                 )
 
                 # Empty result is valid - should return 0
@@ -316,7 +337,7 @@ class TestRunHistoryCommand:
 
     async def test_invalid_format(self):
         """Test handling of invalid format."""
-        with patch('ha_tools.commands.history.HaToolsConfig') as mock_config_class:
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
             mock_config = MagicMock()
             mock_config_class.load.return_value = mock_config
 
@@ -325,14 +346,14 @@ class TestRunHistoryCommand:
                 timeframe="24h",
                 limit=100,
                 stats=False,
-                format="invalid"
+                format="invalid",
             )
 
             assert result == 2  # Validation error exit code
 
     async def test_invalid_timeframe(self):
         """Test handling of invalid timeframe."""
-        with patch('ha_tools.commands.history.HaToolsConfig') as mock_config_class:
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
             mock_config = MagicMock()
             mock_config_class.load.return_value = mock_config
 
@@ -341,14 +362,14 @@ class TestRunHistoryCommand:
                 timeframe="invalid",
                 limit=100,
                 stats=False,
-                format="markdown"
+                format="markdown",
             )
 
             assert result == 2  # Validation error exit code
 
     async def test_config_error(self):
         """Test handling of configuration error."""
-        with patch('ha_tools.commands.history.HaToolsConfig') as mock_config_class:
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
             mock_config_class.load.side_effect = Exception("Config not found")
 
             result = await _run_history_command(
@@ -356,7 +377,7 @@ class TestRunHistoryCommand:
                 timeframe="24h",
                 limit=100,
                 stats=False,
-                format="markdown"
+                format="markdown",
             )
 
             assert result == 3  # Config error exit code
@@ -366,14 +387,18 @@ class TestRunHistoryCommand:
         mock_db = AsyncMock()
         mock_db.is_connected = MagicMock(return_value=True)
         mock_db.get_entity_states.return_value = [
-            {"state": "20.0", "last_updated": "2024-01-01T12:00:00", "last_changed": "2024-01-01T12:00:00"}
+            {
+                "state": "20.0",
+                "last_updated": "2024-01-01T12:00:00",
+                "last_changed": "2024-01-01T12:00:00",
+            }
         ]
 
-        with patch('ha_tools.commands.history.HaToolsConfig') as mock_config_class:
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
             mock_config = MagicMock()
             mock_config_class.load.return_value = mock_config
 
-            with patch('ha_tools.commands.history.DatabaseManager') as mock_db_class:
+            with patch("ha_tools.commands.history.DatabaseManager") as mock_db_class:
                 mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_db)
                 mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
@@ -382,7 +407,7 @@ class TestRunHistoryCommand:
                     timeframe="24h",
                     limit=100,
                     stats=False,
-                    format="markdown"
+                    format="markdown",
                 )
 
                 assert result == 0
@@ -395,11 +420,11 @@ class TestRunHistoryCommand:
         mock_db.is_connected = MagicMock(return_value=True)
         mock_db.get_entity_states.return_value = []
 
-        with patch('ha_tools.commands.history.HaToolsConfig') as mock_config_class:
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
             mock_config = MagicMock()
             mock_config_class.load.return_value = mock_config
 
-            with patch('ha_tools.commands.history.DatabaseManager') as mock_db_class:
+            with patch("ha_tools.commands.history.DatabaseManager") as mock_db_class:
                 mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_db)
                 mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
@@ -408,7 +433,7 @@ class TestRunHistoryCommand:
                     timeframe="24h",
                     limit=-1,
                     stats=False,
-                    format="markdown"
+                    format="markdown",
                 )
 
                 # Verify get_entity_states was called with limit=None

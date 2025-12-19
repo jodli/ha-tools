@@ -93,7 +93,7 @@ from typing import Any, Dict, List, Optional
 
 class HAYAMLLoader(yaml.SafeLoader):
     """Custom YAML loader with Home Assistant tag support."""
-    
+
     def __init__(self, stream, config_path: Path, secrets: Optional[Dict[str, str]] = None):
         super().__init__(stream)
         self.config_path = config_path
@@ -152,7 +152,7 @@ def construct_stub(loader, node):
     """Return a stub value for any HA tag."""
     return f"<{node.tag}:{loader.construct_scalar(node)}>"
 
-for tag in ['!include', '!include_dir_list', '!include_dir_merge_list', 
+for tag in ['!include', '!include_dir_list', '!include_dir_merge_list',
             '!include_dir_named', '!include_dir_merge_named', '!secret', '!env_var']:
     yaml.SafeLoader.add_constructor(tag, construct_stub)
 ```
@@ -205,7 +205,7 @@ def validate_command(
         help="Only perform local YAML syntax validation (fast, no API call)"
     ),
     api_only: bool = typer.Option(
-        False, "--api-only", "-a", 
+        False, "--api-only", "-a",
         help="Skip syntax validation, only call Home Assistant API"
     ),
     expand_includes: bool = typer.Option(
@@ -215,9 +215,9 @@ def validate_command(
 ) -> None:
     """
     Validate Home Assistant configuration.
-    
+
     By default, performs both local syntax validation and full API validation.
-    
+
     Examples:
         ha-tools validate                    # Full validation
         ha-tools validate --syntax-only      # Quick local check

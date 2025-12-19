@@ -4,10 +4,8 @@ Unit tests for ha-tools validate command.
 Tests YAML validation, configuration checking, and error reporting.
 """
 
-import asyncio
-import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml

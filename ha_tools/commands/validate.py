@@ -9,13 +9,20 @@ import asyncio
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config import HaToolsConfig
-from ..lib.output import MarkdownFormatter, print_error, print_info, print_verbose, print_verbose_timing
+from ..lib.output import (
+    MarkdownFormatter,
+    print_error,
+    print_info,
+    print_verbose,
+    print_verbose_timing,
+)
 from ..lib.rest_api import HomeAssistantAPI
 from ..lib.yaml_loader import load_secrets, load_yaml
 
@@ -211,15 +218,15 @@ async def _validate_yaml_file(
     """
     import yaml
 
-    errors = []
-    warnings = []
+    errors: list[str] = []
+    warnings: list[str] = []
 
     if not file_path.exists():
         warnings.append(f"File not found: {file_path}")
         return errors, warnings
 
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
 
         # Try to parse YAML with HA tag support
@@ -269,7 +276,7 @@ def _generate_syntax_report(
 
 
 def _generate_semantic_report(
-    formatter: MarkdownFormatter, validation_result: dict
+    formatter: MarkdownFormatter, validation_result: dict[str, Any]
 ) -> None:
     """Generate semantic validation report."""
     formatter.add_section("🔍 Semantic Validation", "")

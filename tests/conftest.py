@@ -6,13 +6,14 @@ and Home Assistant API interactions.
 """
 
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Dict, Generator, Optional
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 import yaml
 
-from ha_tools.config import HaToolsConfig, DatabaseConfig, HomeAssistantConfig
+from ha_tools.config import HaToolsConfig
 
 
 @pytest.fixture
@@ -45,11 +46,11 @@ def sample_ha_config(temp_dir: Path) -> Path:
                     "test_temperature": {
                         "friendly_name": "Test Temperature",
                         "unit_of_measurement": "°C",
-                        "value_template": "{{ 20.0 }}"
+                        "value_template": "{{ 20.0 }}",
                     }
-                }
+                },
             }
-        ]
+        ],
     }
 
     config_file = config_dir / "configuration.yaml"
@@ -63,10 +64,7 @@ def sample_ha_config(temp_dir: Path) -> Path:
     # Sample package
     package_config = {
         "script": {
-            "test_script": {
-                "alias": "Test Script",
-                "sequence": [{"delay": "00:01:00"}]
-            }
+            "test_script": {"alias": "Test Script", "sequence": [{"delay": "00:01:00"}]}
         }
     }
 
@@ -84,16 +82,12 @@ def sample_config_file(temp_dir: Path) -> Path:
         "home_assistant": {
             "url": "http://localhost:8123",
             "access_token": "test_token_12345",
-            "timeout": 30
+            "timeout": 30,
         },
-        "database": {
-            "url": "sqlite:///test.db",
-            "pool_size": 5,
-            "timeout": 10
-        },
+        "database": {"url": "sqlite:///test.db", "pool_size": 5, "timeout": 10},
         "ha_config_path": str(temp_dir / "config"),
         "output_format": "markdown",
-        "verbose": False
+        "verbose": False,
     }
 
     config_file = temp_dir / ".ha-tools-config.yaml"
@@ -124,20 +118,18 @@ def mock_home_assistant_api():
             "attributes": {
                 "friendly_name": "Test Temperature",
                 "unit_of_measurement": "°C",
-                "device_class": "temperature"
+                "device_class": "temperature",
             },
             "last_changed": "2024-01-01T12:00:00+00:00",
-            "last_updated": "2024-01-01T12:00:00+00:00"
+            "last_updated": "2024-01-01T12:00:00+00:00",
         },
         {
             "entity_id": "switch.test_switch",
             "state": "off",
-            "attributes": {
-                "friendly_name": "Test Switch"
-            },
+            "attributes": {"friendly_name": "Test Switch"},
             "last_changed": "2024-01-01T11:30:00+00:00",
-            "last_updated": "2024-01-01T11:30:00+00:00"
-        }
+            "last_updated": "2024-01-01T11:30:00+00:00",
+        },
     ]
 
     api.get_entity_state.return_value = {
@@ -145,10 +137,10 @@ def mock_home_assistant_api():
         "state": "20.0",
         "attributes": {
             "friendly_name": "Test Temperature",
-            "unit_of_measurement": "°C"
+            "unit_of_measurement": "°C",
         },
         "last_changed": "2024-01-01T12:00:00+00:00",
-        "last_updated": "2024-01-01T12:00:00+00:00"
+        "last_updated": "2024-01-01T12:00:00+00:00",
     }
 
     api.get_errors.return_value = []
@@ -175,7 +167,7 @@ def mock_database_manager():
             "state": "20.0",
             "last_changed": "2024-01-01T12:00:00+00:00",
             "last_updated": "2024-01-01T12:00:00+00:00",
-            "attributes": '{"friendly_name": "Test Temperature", "unit_of_measurement": "°C"}'
+            "attributes": '{"friendly_name": "Test Temperature", "unit_of_measurement": "°C"}',
         }
     ]
 
@@ -185,7 +177,7 @@ def mock_database_manager():
             "mean": 19.5,
             "min": 18.0,
             "max": 21.0,
-            "start": "2024-01-01T00:00:00+00:00"
+            "start": "2024-01-01T00:00:00+00:00",
         }
     ]
 
@@ -212,39 +204,36 @@ def mock_registry_manager(temp_dir: Path):
             "device_class": "temperature",
             "unit_of_measurement": "°C",
             "area_id": "area_1",
-            "device_id": "device_1"
+            "device_id": "device_1",
         },
         {
             "entity_id": "switch.test_switch",
             "friendly_name": "Test Switch",
             "disabled_by": None,
-            "hidden_by": None
-        }
+            "hidden_by": None,
+        },
     ]
 
-    registry._area_registry = {
-        "area_1": {
-            "area_id": "area_1",
-            "name": "Test Area"
-        }
-    }
+    registry._area_registry = {"area_1": {"area_id": "area_1", "name": "Test Area"}}
 
     registry._device_registry = {
         "device_1": {
             "device_id": "device_1",
             "name": "Test Device",
             "manufacturer": "Test Manufacturer",
-            "model": "Test Model"
+            "model": "Test Model",
         }
     }
 
     # Synchronous methods should return values directly (not coroutines)
     registry.search_entities = MagicMock(return_value=registry._entity_registry)
-    registry.get_device_metadata = MagicMock(return_value={
-        "name": "Test Device",
-        "manufacturer": "Test Manufacturer",
-        "model": "Test Model"
-    })
+    registry.get_device_metadata = MagicMock(
+        return_value={
+            "name": "Test Device",
+            "manufacturer": "Test Manufacturer",
+            "model": "Test Model",
+        }
+    )
     registry.get_entity_name = MagicMock(return_value="Test Temperature")
     registry.get_area_name = MagicMock(return_value="Test Area")
 
@@ -289,23 +278,18 @@ SAMPLE_ENTITY_REGISTRY = {
         "friendly_name": "Test Temperature",
         "device_class": "temperature",
         "unit_of_measurement": "°C",
-        "area_id": "area_1"
+        "area_id": "area_1",
     }
 }
 
-SAMPLE_AREA_REGISTRY = {
-    "area_1": {
-        "area_id": "area_1",
-        "name": "Living Room"
-    }
-}
+SAMPLE_AREA_REGISTRY = {"area_1": {"area_id": "area_1", "name": "Living Room"}}
 
 SAMPLE_DEVICE_REGISTRY = {
     "device_1": {
         "device_id": "device_1",
         "name": "Weather Station",
         "manufacturer": "Test Corp",
-        "model": "WS-1000"
+        "model": "WS-1000",
     }
 }
 
@@ -315,7 +299,7 @@ SAMPLE_STATES = [
         "state": "20.5",
         "attributes": {"friendly_name": "Test Temperature"},
         "last_changed": "2024-01-01T12:00:00+00:00",
-        "last_updated": "2024-01-01T12:00:00+00:00"
+        "last_updated": "2024-01-01T12:00:00+00:00",
     }
 ]
 
@@ -324,6 +308,6 @@ SAMPLE_ERROR_LOG = [
         "timestamp": "2024-01-01T12:01:00",
         "message": "Error in sensor.test_temperature: Failed to get temperature",
         "source": "/config/home-assistant.log",
-        "context": ["Traceback...", "ValueError: Failed to get temperature"]
+        "context": ["Traceback...", "ValueError: Failed to get temperature"],
     }
 ]

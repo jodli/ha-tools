@@ -8,51 +8,53 @@ import asyncio
 import sys
 import time
 from datetime import datetime
-from typing import Optional, List
+from typing import Any
 
 import typer
 from rich.console import Console
 
 from ..config import HaToolsConfig
 from ..lib.database import DatabaseManager
-from ..lib.rest_api import HomeAssistantAPI
+from ..lib.output import (
+    MarkdownFormatter,
+    format_timestamp,
+    is_verbose,
+    print_error,
+    print_info,
+    print_verbose,
+    print_verbose_timing,
+)
 from ..lib.registry import RegistryManager
-from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp, print_verbose, print_verbose_timing, is_verbose
+from ..lib.rest_api import HomeAssistantAPI
 from ..lib.utils import parse_timeframe
 
 console = Console()
 
 
 def entities_command(
-    search: Optional[str] = typer.Option(
+    search: str | None = typer.Option(
         None,
         "--search",
         "-s",
-        help="Search pattern with * wildcard support. Use | for OR: 'temp|humidity' or 'script.*saugen'"
+        help="Search pattern with * wildcard support. Use | for OR: 'temp|humidity' or 'script.*saugen'",
     ),
-    include: Optional[str] = typer.Option(
+    include: str | None = typer.Option(
         None,
         "--include",
         "-i",
-        help="Include additional data (state, history, relations)"
+        help="Include additional data (state, history, relations)",
     ),
-    history: Optional[str] = typer.Option(
+    history: str | None = typer.Option(
         None,
         "--history",
         "-h",
-        help="History timeframe: Nh (hours), Nd (days), Nm (minutes), Nw (weeks)"
+        help="History timeframe: Nh (hours), Nd (days), Nm (minutes), Nw (weeks)",
     ),
-    limit: Optional[int] = typer.Option(
-        100,
-        "--limit",
-        "-l",
-        help="Maximum number of entities to return"
+    limit: int | None = typer.Option(
+        100, "--limit", "-l", help="Maximum number of entities to return"
     ),
-    format: Optional[str] = typer.Option(
-        "markdown",
-        "--format",
-        "-f",
-        help="Output format (markdown, json, table)"
+    format: str | None = typer.Option(
+        "markdown", "--format", "-f", help="Output format (markdown, json, table)"
     ),
 ) -> None:
     """
@@ -68,7 +70,9 @@ def entities_command(
         ha-tools entities --search "sensor" --format json
     """
     try:
-        exit_code = asyncio.run(_run_entities_command(search, include, history, limit, format))
+        exit_code = asyncio.run(
+            _run_entities_command(search, include, history, limit, format or "markdown")
+        )
         sys.exit(exit_code)
     except KeyboardInterrupt:
         print_error("Entity discovery cancelled")
@@ -78,9 +82,13 @@ def entities_command(
         sys.exit(1)
 
 
-async def _run_entities_command(search: Optional[str], include: Optional[str],
-                              history: Optional[str], limit: Optional[int],
-                              format: str) -> int:
+async def _run_entities_command(
+    search: str | None,
+    include: str | None,
+    history: str | None,
+    limit: int | None,
+    format: str,
+) -> int:
     """Run the entities discovery command."""
     try:
         config = HaToolsConfig.load()
@@ -124,24 +132,29 @@ async def _run_entities_command(search: Optional[str], include: Optional[str],
     return 0
 
 
-def _parse_include_options(include: Optional[str]) -> set[str]:
+def _parse_include_options(include: str | None) -> set[str]:
     """Parse include options string."""
     if not include:
         return set()
 
-    options = set(opt.strip().lower() for opt in include.split(","))
+    options = {opt.strip().lower() for opt in include.split(",")}
     valid_options = {"state", "history", "relations", "metadata"}
 
     # Filter for valid options
     return {opt for opt in options if opt in valid_options}
 
 
-async def _get_entities(registry: RegistryManager, db: DatabaseManager,
-                       api: HomeAssistantAPI, search: Optional[str],
-                       include_options: set[str], history_timeframe: Optional[datetime],
-                       limit: Optional[int]) -> List[dict]:
+async def _get_entities(
+    registry: RegistryManager,
+    db: DatabaseManager,
+    api: HomeAssistantAPI,
+    search: str | None,
+    include_options: set[str],
+    history_timeframe: datetime | None,
+    limit: int | None,
+) -> list[dict[str, Any]]:
     """Get entities data based on search criteria."""
-    entities_data = []
+    entities_data: list[dict[str, Any]] = []
 
     # Get entities from registry
     if search:
@@ -178,7 +191,9 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
         print_verbose(f"Fetching state for {len(entities_data)} entities...")
         state_start = time.time()
 
-        async def get_entity_state(entity_data):
+        async def get_entity_state(
+            entity_data: dict[str, Any],
+        ) -> dict[str, Any]:
             try:
                 state = await api.get_entity_state(entity_data["entity_id"])
                 if state:
@@ -193,7 +208,9 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
         # Use semaphore to limit concurrent requests (avoid overwhelming Home Assistant)
         semaphore = asyncio.Semaphore(10)  # Limit to 10 concurrent requests
 
-        async def get_with_semaphore(entity_data):
+        async def get_with_semaphore(
+            entity_data: dict[str, Any],
+        ) -> dict[str, Any]:
             async with semaphore:
                 return await get_entity_state(entity_data)
 
@@ -212,17 +229,25 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
             try:
                 # Use include_stats in verbose mode to show query performance info
                 result = await db.get_entity_states(
-                    entity_data["entity_id"], history_timeframe, None, 10,
-                    include_stats=is_verbose()
+                    entity_data["entity_id"],
+                    history_timeframe,
+                    None,
+                    10,
+                    include_stats=is_verbose(),
                 )
+                history_records: list[dict[str, Any]]
                 if is_verbose() and isinstance(result, tuple):
                     history_records, stats = result
                     total = stats.get("total_records", 0)
                     filtered = stats.get("filtered_count", 0)
                     query_ms = stats.get("query_time_ms", 0)
-                    print_verbose(f"  {entity_data['entity_id']}: {total:,} total records, {filtered} in timeframe, query: {query_ms:.1f}ms")
-                else:
+                    print_verbose(
+                        f"  {entity_data['entity_id']}: {total:,} total records, {filtered} in timeframe, query: {query_ms:.1f}ms"
+                    )
+                elif isinstance(result, list):
                     history_records = result
+                else:
+                    history_records = result[0]
                 entity_data["history"] = history_records
                 entity_data["history_count"] = len(history_records)
             except Exception as e:
@@ -236,18 +261,17 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
             relations = {}
             if entity_data.get("area_id"):
                 # get_area_name might be async in some implementations
-                area_name = registry.get_area_name(entity_data["area_id"])
-                if hasattr(area_name, '__await__'):
-                    area_name = await area_name
-                relations["area"] = {
-                    "id": entity_data["area_id"],
-                    "name": area_name
-                }
+                area_name_result = registry.get_area_name(entity_data["area_id"])
+                if hasattr(area_name_result, "__await__"):
+                    area_name = await area_name_result
+                else:
+                    area_name = str(area_name_result)
+                relations["area"] = {"id": entity_data["area_id"], "name": area_name}
 
             if entity_data.get("device_id"):
                 device_info = registry.get_device_metadata(entity_data["device_id"])
                 # Handle case where get_device_metadata might be async (from mocks)
-                if hasattr(device_info, '__await__'):
+                if hasattr(device_info, "__await__"):
                     device_info = await device_info
                 relations["device"] = {
                     "id": entity_data["device_id"],
@@ -267,11 +291,13 @@ async def _get_entities(registry: RegistryManager, db: DatabaseManager,
     return entities_data
 
 
-async def _output_results(entities_data: List[dict], format: str,
-                         include_options: set[str]) -> None:
+async def _output_results(
+    entities_data: list[dict[str, Any]], format: str, include_options: set[str]
+) -> None:
     """Output entities data in specified format."""
     if format == "json":
         import json
+
         print(json.dumps(entities_data, indent=2, default=str))
     elif format == "table":
         _output_table_format(entities_data, include_options)
@@ -279,7 +305,9 @@ async def _output_results(entities_data: List[dict], format: str,
         _output_markdown_format(entities_data, include_options)
 
 
-def _output_table_format(entities_data: List[dict], include_options: set[str]) -> None:
+def _output_table_format(
+    entities_data: list[dict[str, Any]], include_options: set[str]
+) -> None:
     """Output entities in table format."""
     if not entities_data:
         print("No entities found.")
@@ -318,12 +346,16 @@ def _output_table_format(entities_data: List[dict], include_options: set[str]) -
     console.print(table)
 
 
-def _output_markdown_format(entities_data: List[dict], include_options: set[str]) -> None:
+def _output_markdown_format(
+    entities_data: list[dict[str, Any]], include_options: set[str]
+) -> None:
     """Output entities in markdown format."""
     formatter = MarkdownFormatter(title="Entity Discovery Results")
 
     if not entities_data:
-        formatter.add_section("No Entities Found", "No entities matched your search criteria.")
+        formatter.add_section(
+            "No Entities Found", "No entities matched your search criteria."
+        )
         print(formatter.format())
         return
 
@@ -333,7 +365,7 @@ def _output_markdown_format(entities_data: List[dict], include_options: set[str]
         f"Found **{len(entities_data)}** entities"
         f"{' with history data' if 'history' in include_options else ''}"
         f"{' with current state' if 'state' in include_options else ''}"
-        f"{' with relations' if 'relations' in include_options else ''}"
+        f"{' with relations' if 'relations' in include_options else ''}",
     )
 
     # Entity table
@@ -379,7 +411,9 @@ def _output_markdown_format(entities_data: List[dict], include_options: set[str]
             if "state" in include_options and "current_state" in entity:
                 details.append(f"**Current State:** {entity['current_state']}")
                 if entity.get("last_changed"):
-                    details.append(f"**Last Changed:** {format_timestamp(entity['last_changed'])}")
+                    details.append(
+                        f"**Last Changed:** {format_timestamp(entity['last_changed'])}"
+                    )
 
             # History information
             if "history" in include_options and "history_count" in entity:
@@ -399,11 +433,15 @@ def _output_markdown_format(entities_data: List[dict], include_options: set[str]
                     details.append(f"**Area:** {relations['area']['name']}")
                 if "device" in relations:
                     device = relations["device"]
-                    details.append(f"**Device:** {device['name']} ({device.get('manufacturer', 'Unknown')})")
+                    details.append(
+                        f"**Device:** {device['name']} ({device.get('manufacturer', 'Unknown')})"
+                    )
 
             formatter.add_section(entity_id, "\n".join(details))
 
         if len(entities_data) > 10:
-            formatter.add_section("", f"... and {len(entities_data) - 10} more entities")
+            formatter.add_section(
+                "", f"... and {len(entities_data) - 10} more entities"
+            )
 
     print(formatter.format())

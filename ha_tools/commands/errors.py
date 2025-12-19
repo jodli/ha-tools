@@ -5,21 +5,28 @@ Provides runtime error diagnostics with correlation to entity state changes.
 """
 
 import asyncio
+import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, List
-import re
+from typing import Any
 
 import typer
 from rich.console import Console
 
 from ..config import HaToolsConfig
 from ..lib.database import DatabaseManager
-from ..lib.rest_api import HomeAssistantAPI
+from ..lib.output import (
+    MarkdownFormatter,
+    format_timestamp,
+    print_error,
+    print_info,
+    print_verbose,
+    print_verbose_timing,
+)
 from ..lib.registry import RegistryManager
-from ..lib.output import MarkdownFormatter, print_error, print_info, format_timestamp, print_verbose, print_verbose_timing
+from ..lib.rest_api import HomeAssistantAPI
 from ..lib.utils import parse_timeframe
 
 console = Console()
@@ -27,39 +34,25 @@ console = Console()
 
 def errors_command(
     current: bool = typer.Option(
-        False,
-        "--current",
-        "-c",
-        help="Show only current runtime errors"
+        False, "--current", "-c", help="Show only current runtime errors"
     ),
-    log: Optional[str] = typer.Option(
+    log: str | None = typer.Option(
         None,
         "--log",
         "-l",
-        help="Timeframe for log analysis: Nh (hours), Nd (days), Nm (minutes), Nw (weeks)"
+        help="Timeframe for log analysis: Nh (hours), Nd (days), Nm (minutes), Nw (weeks)",
     ),
-    entity: Optional[str] = typer.Option(
-        None,
-        "--entity",
-        "-e",
-        help="Filter errors for specific entity pattern"
+    entity: str | None = typer.Option(
+        None, "--entity", "-e", help="Filter errors for specific entity pattern"
     ),
-    integration: Optional[str] = typer.Option(
-        None,
-        "--integration",
-        "-i",
-        help="Filter errors by integration/component"
+    integration: str | None = typer.Option(
+        None, "--integration", "-i", help="Filter errors by integration/component"
     ),
     correlation: bool = typer.Option(
-        False,
-        "--correlation",
-        help="Include entity state correlation analysis"
+        False, "--correlation", help="Include entity state correlation analysis"
     ),
-    format: Optional[str] = typer.Option(
-        "markdown",
-        "--format",
-        "-f",
-        help="Output format (markdown, json)"
+    format: str | None = typer.Option(
+        "markdown", "--format", "-f", help="Output format (markdown, json)"
     ),
 ) -> None:
     """
@@ -74,9 +67,11 @@ def errors_command(
         ha-tools errors --integration "knx" --correlation
     """
     try:
-        exit_code = asyncio.run(_run_errors_command(
-            current, log, entity, integration, correlation, format
-        ))
+        exit_code = asyncio.run(
+            _run_errors_command(
+                current, log, entity, integration, correlation, format or "markdown"
+            )
+        )
         sys.exit(exit_code)
     except KeyboardInterrupt:
         print_error("Error analysis cancelled")
@@ -86,9 +81,14 @@ def errors_command(
         sys.exit(1)
 
 
-async def _run_errors_command(current: bool, log: Optional[str], entity: Optional[str],
-                            integration: Optional[str], correlation: bool,
-                            format: str) -> int:
+async def _run_errors_command(
+    current: bool,
+    log: str | None,
+    entity: str | None,
+    integration: str | None,
+    correlation: bool,
+    format: str,
+) -> int:
     """Run the errors analysis command."""
     try:
         config = HaToolsConfig.load()
@@ -126,7 +126,14 @@ async def _run_errors_command(current: bool, log: Optional[str], entity: Optiona
             print_verbose("Collecting errors from sources...")
             start = time.time()
             errors_data = await _collect_errors(
-                api, db, registry, current, log_timeframe, entity, integration, correlation
+                api,
+                db,
+                registry,
+                current,
+                log_timeframe,
+                entity,
+                integration,
+                correlation,
             )
             print_verbose_timing("Error collection", (time.time() - start) * 1000)
 
@@ -136,17 +143,23 @@ async def _run_errors_command(current: bool, log: Optional[str], entity: Optiona
     return 0
 
 
-async def _collect_errors(api: HomeAssistantAPI, db: DatabaseManager,
-                         registry: RegistryManager, current: bool,
-                         log_timeframe: Optional[datetime], entity: Optional[str],
-                         integration: Optional[str], correlation: bool) -> dict:
+async def _collect_errors(
+    api: HomeAssistantAPI,
+    db: DatabaseManager,
+    registry: RegistryManager,
+    current: bool,
+    log_timeframe: datetime | None,
+    entity: str | None,
+    integration: str | None,
+    correlation: bool,
+) -> dict[str, Any]:
     """Collect errors from multiple sources."""
     from datetime import timedelta
 
-    errors_data = {
+    errors_data: dict[str, list[dict[str, Any]]] = {
         "api_errors": [],
         "log_errors": [],
-        "correlations": []
+        "correlations": [],
     }
 
     # Get current runtime errors from API
@@ -185,7 +198,9 @@ async def _collect_errors(api: HomeAssistantAPI, db: DatabaseManager,
     return errors_data
 
 
-def _filter_errors(errors: List[dict], entity: Optional[str], integration: Optional[str]) -> List[dict]:
+def _filter_errors(
+    errors: list[dict[str, Any]], entity: str | None, integration: str | None
+) -> list[dict[str, Any]]:
     """Filter errors based on entity and integration criteria."""
     if not errors:
         return []
@@ -212,8 +227,9 @@ def _filter_errors(errors: List[dict], entity: Optional[str], integration: Optio
     return filtered
 
 
-async def _analyze_log_files(ha_config_path: str, since: datetime,
-                           entity: Optional[str], integration: Optional[str]) -> List[dict]:
+async def _analyze_log_files(
+    ha_config_path: str, since: datetime, entity: str | None, integration: str | None
+) -> list[dict[str, Any]]:
     """Analyze Home Assistant log files for errors."""
     log_errors = []
 
@@ -226,11 +242,14 @@ async def _analyze_log_files(ha_config_path: str, since: datetime,
 
     # Also check OS-specific log directories
     import os
+
     if os.name == "posix":
-        log_paths.extend([
-            Path("/var/log/home-assistant/home-assistant.log"),
-            Path("/var/lib/home-assistant/home-assistant.log"),
-        ])
+        log_paths.extend(
+            [
+                Path("/var/log/home-assistant/home-assistant.log"),
+                Path("/var/lib/home-assistant/home-assistant.log"),
+            ]
+        )
 
     for log_path in log_paths:
         if not log_path.exists():
@@ -250,18 +269,19 @@ async def _analyze_log_files(ha_config_path: str, since: datetime,
     return log_errors
 
 
-async def _parse_log_file(log_path: Path, since: datetime,
-                         entity: Optional[str], integration: Optional[str]) -> List[dict]:
+async def _parse_log_file(
+    log_path: Path, since: datetime, entity: str | None, integration: str | None
+) -> list[dict[str, Any]]:
     """Parse a single log file for errors."""
-    errors = []
+    errors: list[dict[str, Any]] = []
 
     try:
-        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+        with open(log_path, encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
     except Exception:
         return []
 
-    current_error = None
+    current_error: dict[str, Any] | None = None
     error_patterns = [
         r"ERROR",
         r"Exception",
@@ -301,7 +321,7 @@ async def _parse_log_file(log_path: Path, since: datetime,
                 "timestamp": timestamp or datetime.now(),
                 "message": line,
                 "source": str(log_path),
-                "context": []
+                "context": [],
             }
         elif current_error:
             # Continue current error context
@@ -323,10 +343,11 @@ async def _parse_log_file(log_path: Path, since: datetime,
     return errors
 
 
-async def _perform_correlation_analysis(db: DatabaseManager, registry: RegistryManager,
-                                     errors: List[dict]) -> List[dict]:
+async def _perform_correlation_analysis(
+    db: DatabaseManager, registry: RegistryManager, errors: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """Correlate errors with entity state changes."""
-    correlations = []
+    correlations: list[dict[str, Any]] = []
 
     if not errors:
         return correlations
@@ -353,21 +374,29 @@ async def _perform_correlation_analysis(db: DatabaseManager, registry: RegistryM
                 start_time = error_time - timedelta(minutes=5)
                 end_time = error_time + timedelta(minutes=5)
 
-                state_changes = await db.get_entity_states(
+                state_changes_result = await db.get_entity_states(
                     entity_id, start_time, end_time, 10
+                )
+                # Handle both tuple (with stats) and list return types
+                state_changes: list[dict[str, Any]] = (
+                    state_changes_result[0]
+                    if isinstance(state_changes_result, tuple)
+                    else state_changes_result
                 )
 
                 if len(state_changes) > 1:  # More than just the current state
-                    correlations.append({
-                        "error_timestamp": error_time,
-                        "error_message": error_text[:100] + "...",
-                        "entity_id": entity_id,
-                        "entity_name": await registry.get_entity_name(entity_id),
-                        "state_changes": state_changes,
-                        "correlation_strength": _calculate_correlation_strength(
-                            error_time, state_changes
-                        )
-                    })
+                    correlations.append(
+                        {
+                            "error_timestamp": error_time,
+                            "error_message": error_text[:100] + "...",
+                            "entity_id": entity_id,
+                            "entity_name": await registry.get_entity_name(entity_id),
+                            "state_changes": state_changes,
+                            "correlation_strength": _calculate_correlation_strength(
+                                error_time, state_changes
+                            ),
+                        }
+                    )
             except Exception:
                 continue
 
@@ -377,7 +406,7 @@ async def _perform_correlation_analysis(db: DatabaseManager, registry: RegistryM
     return correlations[:10]  # Return top 10 correlations
 
 
-def _extract_entity_references(text: str) -> List[str]:
+def _extract_entity_references(text: str) -> list[str]:
     """Extract entity IDs from error text."""
     # Common patterns for entity IDs
     patterns = [
@@ -402,7 +431,9 @@ def _extract_entity_references(text: str) -> List[str]:
     return list(set(valid_entities))  # Remove duplicates
 
 
-def _calculate_correlation_strength(error_time: datetime, state_changes: List[dict]) -> float:
+def _calculate_correlation_strength(
+    error_time: datetime, state_changes: list[dict[str, Any]]
+) -> float:
     """Calculate correlation strength between error and state changes."""
     if not state_changes:
         return 0.0
@@ -433,16 +464,19 @@ def _calculate_correlation_strength(error_time: datetime, state_changes: List[di
     return min(strength, 3.0)  # Cap at 3.0
 
 
-async def _output_errors(errors_data: dict, format: str, correlation: bool) -> None:
+async def _output_errors(
+    errors_data: dict[str, Any], format: str, correlation: bool
+) -> None:
     """Output errors analysis in specified format."""
     if format == "json":
         import json
+
         print(json.dumps(errors_data, indent=2, default=str))
     else:  # markdown
         _output_markdown_format(errors_data, correlation)
 
 
-def _output_markdown_format(errors_data: dict, correlation: bool) -> None:
+def _output_markdown_format(errors_data: dict[str, Any], correlation: bool) -> None:
     """Output errors analysis in markdown format."""
     formatter = MarkdownFormatter(title="Error Analysis Results")
 
@@ -454,7 +488,7 @@ def _output_markdown_format(errors_data: dict, correlation: bool) -> None:
         f"Total errors found: **{total_errors}**\n"
         f"- Current runtime errors: {len(errors_data['api_errors'])}\n"
         f"- Log file errors: {len(errors_data['log_errors'])}\n"
-        f"- Correlations found: {len(errors_data['correlations'])}"
+        f"- Correlations found: {len(errors_data['correlations'])}",
     )
 
     # Current runtime errors
@@ -471,10 +505,12 @@ def _output_markdown_format(errors_data: dict, correlation: bool) -> None:
                 f"Error {i} - {timestamp}",
                 f"**Source:** `{source}`\n"
                 f"**Message:** {message}\n"
-                + (f"**Context:**\n```\n{context_str}\n```" if context_str else "")
+                + (f"**Context:**\n```\n{context_str}\n```" if context_str else ""),
             )
         if len(errors_data["api_errors"]) > 10:
-            formatter.add_section("", f"... and {len(errors_data['api_errors']) - 10} more errors")
+            formatter.add_section(
+                "", f"... and {len(errors_data['api_errors']) - 10} more errors"
+            )
 
     # Log file errors
     if errors_data["log_errors"]:
@@ -487,17 +523,21 @@ def _output_markdown_format(errors_data: dict, correlation: bool) -> None:
                 f"Error {i} - {timestamp}",
                 f"**Source:** {source}\n"
                 f"**Message:** {message}\n"
-                f"**Context:** {' | '.join(error.get('context', [])[:3])}"
+                f"**Context:** {' | '.join(error.get('context', [])[:3])}",
             )
         if len(errors_data["log_errors"]) > 15:
-            formatter.add_section("", f"... and {len(errors_data['log_errors']) - 15} more errors")
+            formatter.add_section(
+                "", f"... and {len(errors_data['log_errors']) - 15} more errors"
+            )
 
     # Correlation analysis
     if correlation and errors_data["correlations"]:
         formatter.add_section("🔗 Correlation Analysis", "")
         for corr in errors_data["correlations"]:
             strength = corr.get("correlation_strength", 0)
-            strength_emoji = "🔴" if strength > 2.0 else "🟡" if strength > 1.0 else "🟢"
+            strength_emoji = (
+                "🔴" if strength > 2.0 else "🟡" if strength > 1.0 else "🟢"
+            )
 
             formatter.add_section(
                 f"{strength_emoji} Entity: {corr.get('entity_name', 'Unknown')}",
@@ -505,10 +545,13 @@ def _output_markdown_format(errors_data: dict, correlation: bool) -> None:
                 f"**Entity ID:** `{corr['entity_id']}`\n"
                 f"**Correlation Strength:** {strength:.1f}/3.0\n"
                 f"**Error:** {corr['error_message']}\n"
-                f"**State Changes:** {len(corr['state_changes'])} states around error time"
+                f"**State Changes:** {len(corr['state_changes'])} states around error time",
             )
 
     if not any([errors_data["api_errors"], errors_data["log_errors"]]):
-        formatter.add_section("✅ No Errors Found", "Great! No errors detected in the specified timeframe.")
+        formatter.add_section(
+            "✅ No Errors Found",
+            "Great! No errors detected in the specified timeframe.",
+        )
 
     print(formatter.format())

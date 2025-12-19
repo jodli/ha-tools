@@ -7,11 +7,11 @@ Tests configuration loading, validation, and environment variable support.
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+
 import pytest
 import yaml
 
-from ha_tools.config import HaToolsConfig, DatabaseConfig, HomeAssistantConfig
+from ha_tools.config import DatabaseConfig, HaToolsConfig, HomeAssistantConfig
 
 
 class TestDatabaseConfig:
@@ -47,10 +47,7 @@ class TestDatabaseConfig:
     def test_custom_config_values(self):
         """Test custom configuration values."""
         config = DatabaseConfig(
-            url="sqlite:///test.db",
-            pool_size=20,
-            timeout=60,
-            max_overflow=40
+            url="sqlite:///test.db", pool_size=20, timeout=60, max_overflow=40
         )
         assert config.pool_size == 20
         assert config.timeout == 60
@@ -63,8 +60,7 @@ class TestHomeAssistantConfig:
     def test_valid_http_url(self):
         """Test valid HTTP URL."""
         config = HomeAssistantConfig(
-            url="http://localhost:8123",
-            access_token="test_token"
+            url="http://localhost:8123", access_token="test_token"
         )
         assert config.url == "http://localhost:8123"
         assert config.access_token == "test_token"
@@ -73,16 +69,12 @@ class TestHomeAssistantConfig:
     def test_url_normalization(self):
         """Test URL normalization."""
         # Adds http:// prefix
-        config = HomeAssistantConfig(
-            url="localhost:8123",
-            access_token="test_token"
-        )
+        config = HomeAssistantConfig(url="localhost:8123", access_token="test_token")
         assert config.url == "http://localhost:8123"
 
         # Removes trailing slash
         config = HomeAssistantConfig(
-            url="https://homeassistant.local:8123/",
-            access_token="test_token"
+            url="https://homeassistant.local:8123/", access_token="test_token"
         )
         assert config.url == "https://homeassistant.local:8123"
 
@@ -94,9 +86,7 @@ class TestHomeAssistantConfig:
     def test_custom_config_values(self):
         """Test custom configuration values."""
         config = HomeAssistantConfig(
-            url="http://localhost:8123",
-            access_token="test_token",
-            timeout=60
+            url="http://localhost:8123", access_token="test_token", timeout=60
         )
         assert config.timeout == 60
 
@@ -143,7 +133,7 @@ class TestHaToolsConfig:
             "HA_TOOLS_HOME_ASSISTANT__ACCESS_TOKEN": "env_token",
             "HA_TOOLS_DATABASE__URL": "postgresql://env_user:env_pass@localhost/env_db",
             "HA_TOOLS_OUTPUT_FORMAT": "json",
-            "HA_TOOLS_VERBOSE": "true"
+            "HA_TOOLS_VERBOSE": "true",
         }
 
         # Temporarily set environment variables
@@ -165,7 +155,10 @@ class TestHaToolsConfig:
 
                 assert config.home_assistant.url == "http://env.local:8123"
                 assert config.home_assistant.access_token == "env_token"
-                assert config.database.url == "postgresql://env_user:env_pass@localhost/env_db"
+                assert (
+                    config.database.url
+                    == "postgresql://env_user:env_pass@localhost/env_db"
+                )
                 assert config.output_format == "json"
                 assert config.verbose is True
 
@@ -183,13 +176,12 @@ class TestHaToolsConfig:
 
         config = HaToolsConfig(
             home_assistant=HomeAssistantConfig(
-                url="https://ha.local:8123",
-                access_token="save_token"
+                url="https://ha.local:8123", access_token="save_token"
             ),
             database=DatabaseConfig(url="sqlite:///save.db"),
             ha_config_path="/config/path",
             output_format="table",
-            verbose=True
+            verbose=True,
         )
 
         config.save(config_file)
@@ -197,7 +189,7 @@ class TestHaToolsConfig:
         # Verify file was created and contains correct data
         assert config_file.exists()
 
-        with open(config_file, "r") as f:
+        with open(config_file) as f:
             saved_data = yaml.safe_load(f)
 
         assert saved_data["home_assistant"]["url"] == "https://ha.local:8123"
@@ -210,11 +202,10 @@ class TestHaToolsConfig:
         """Test successful access validation."""
         config = HaToolsConfig(
             home_assistant=HomeAssistantConfig(
-                url="http://localhost:8123",
-                access_token="test_token"
+                url="http://localhost:8123", access_token="test_token"
             ),
             database=DatabaseConfig(url="sqlite:///test.db"),
-            ha_config_path=str(sample_ha_config)
+            ha_config_path=str(sample_ha_config),
         )
 
         # Should not raise an exception
@@ -224,14 +215,15 @@ class TestHaToolsConfig:
         """Test access validation with missing config directory."""
         config = HaToolsConfig(
             home_assistant=HomeAssistantConfig(
-                url="http://localhost:8123",
-                access_token="test_token"
+                url="http://localhost:8123", access_token="test_token"
             ),
             database=DatabaseConfig(url="sqlite:///test.db"),
-            ha_config_path="/non/existent/path"
+            ha_config_path="/non/existent/path",
         )
 
-        with pytest.raises(ValueError, match="Home Assistant config directory not found"):
+        with pytest.raises(
+            ValueError, match="Home Assistant config directory not found"
+        ):
             config.validate_access()
 
     def test_validate_access_missing_config_file(self, temp_dir: Path):
@@ -241,11 +233,10 @@ class TestHaToolsConfig:
 
         config = HaToolsConfig(
             home_assistant=HomeAssistantConfig(
-                url="http://localhost:8123",
-                access_token="test_token"
+                url="http://localhost:8123", access_token="test_token"
             ),
             database=DatabaseConfig(url="sqlite:///test.db"),
-            ha_config_path=str(empty_config_dir)
+            ha_config_path=str(empty_config_dir),
         )
 
         with pytest.raises(ValueError, match="Required Home Assistant file not found"):
@@ -267,9 +258,9 @@ class TestHaToolsConfig:
         config_data = {
             "home_assistant": {
                 "url": "http://custom.local:8123",
-                "access_token": "custom_token"
+                "access_token": "custom_token",
             },
-            "database": {"url": "sqlite:///custom.db"}
+            "database": {"url": "sqlite:///custom.db"},
         }
 
         with open(custom_path, "w") as f:
@@ -285,7 +276,7 @@ class TestHaToolsConfig:
         """Test partial configuration file supplemented with environment variables."""
         env_vars = {
             "HA_TOOLS_HOME_ASSISTANT__ACCESS_TOKEN": "env_token",
-            "HA_TOOLS_DATABASE__URL": "postgresql://env_user:env_pass@localhost/env_db"
+            "HA_TOOLS_DATABASE__URL": "postgresql://env_user:env_pass@localhost/env_db",
         }
 
         # Temporarily set environment variables
@@ -302,7 +293,7 @@ class TestHaToolsConfig:
                         "url": "http://localhost:8123"
                         # Missing access_token - should come from env
                     },
-                    "output_format": "json"
+                    "output_format": "json",
                 }
 
                 with open(partial_config_file, "w") as f:
@@ -313,7 +304,10 @@ class TestHaToolsConfig:
 
                 assert config.home_assistant.url == "http://localhost:8123"
                 assert config.home_assistant.access_token == "env_token"
-                assert config.database.url == "postgresql://env_user:env_pass@localhost/env_db"
+                assert (
+                    config.database.url
+                    == "postgresql://env_user:env_pass@localhost/env_db"
+                )
                 assert config.output_format == "json"
 
         finally:

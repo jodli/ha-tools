@@ -4,14 +4,17 @@ Unit tests for ha-tools entities command.
 Tests entity discovery, filtering, history retrieval, and output formatting.
 """
 
-import asyncio
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from ha_tools.commands.entities import (
-    _run_entities_command, _parse_include_options,
-    _get_entities, _output_results, _output_table_format, _output_markdown_format
+    _get_entities,
+    _output_markdown_format,
+    _output_results,
+    _output_table_format,
+    _parse_include_options,
 )
 from ha_tools.lib.utils import parse_timeframe
 
@@ -19,9 +22,6 @@ from ha_tools.lib.utils import parse_timeframe
 class TestEntitiesCommand:
     """Test entities command functionality."""
 
-    
-
-    
     def test_parse_include_options_valid(self):
         """Test parsing valid include options."""
         options = _parse_include_options("state,history,relations")
@@ -60,7 +60,7 @@ class TestEntitiesCommand:
     def test_parse_timeframe_hours(self):
         """Test parsing timeframe in hours."""
         base_time = datetime(2024, 1, 1, 12, 0, 0)
-        with patch('ha_tools.lib.utils.datetime') as mock_datetime:
+        with patch("ha_tools.lib.utils.datetime") as mock_datetime:
             mock_datetime.now.return_value = base_time
 
             result = parse_timeframe("24h")
@@ -70,7 +70,7 @@ class TestEntitiesCommand:
     def test_parse_timeframe_days(self):
         """Test parsing timeframe in days."""
         base_time = datetime(2024, 1, 1, 12, 0, 0)
-        with patch('ha_tools.lib.utils.datetime') as mock_datetime:
+        with patch("ha_tools.lib.utils.datetime") as mock_datetime:
             mock_datetime.now.return_value = base_time
 
             result = parse_timeframe("7d")
@@ -80,7 +80,7 @@ class TestEntitiesCommand:
     def test_parse_timeframe_minutes(self):
         """Test parsing timeframe in minutes."""
         base_time = datetime(2024, 1, 1, 12, 0, 0)
-        with patch('ha_tools.lib.utils.datetime') as mock_datetime:
+        with patch("ha_tools.lib.utils.datetime") as mock_datetime:
             mock_datetime.now.return_value = base_time
 
             result = parse_timeframe("30m")
@@ -90,7 +90,7 @@ class TestEntitiesCommand:
     def test_parse_timeframe_weeks(self):
         """Test parsing timeframe in weeks."""
         base_time = datetime(2024, 1, 1, 12, 0, 0)
-        with patch('ha_tools.lib.utils.datetime') as mock_datetime:
+        with patch("ha_tools.lib.utils.datetime") as mock_datetime:
             mock_datetime.now.return_value = base_time
 
             result = parse_timeframe("2w")
@@ -113,28 +113,28 @@ class TestEntitiesCommand:
             {
                 "entity_id": "sensor.temperature",
                 "friendly_name": "Temperature",
-                "device_class": "temperature"
+                "device_class": "temperature",
             },
             {
                 "entity_id": "switch.light",
                 "friendly_name": "Light",
-                "disabled_by": None
-            }
+                "disabled_by": None,
+            },
         ]
 
         entities = await _get_entities(
-            mock_registry, mock_db, mock_api,
+            mock_registry,
+            mock_db,
+            mock_api,
             search=None,
             include_options=set(),
             history_timeframe=None,
-            limit=None
+            limit=None,
         )
 
         assert len(entities) == 2
         assert entities[0]["entity_id"] == "sensor.temperature"
         assert entities[1]["entity_id"] == "switch.light"
-
-    
 
     @pytest.mark.asyncio
     async def test_get_entities_with_state(self):
@@ -144,10 +144,7 @@ class TestEntitiesCommand:
         mock_api = AsyncMock()
 
         mock_registry._entity_registry = [
-            {
-                "entity_id": "sensor.temperature",
-                "friendly_name": "Temperature"
-            }
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"}
         ]
 
         mock_api.get_entity_state.return_value = {
@@ -155,15 +152,17 @@ class TestEntitiesCommand:
             "state": "20.5",
             "attributes": {"unit_of_measurement": "°C"},
             "last_changed": "2024-01-01T12:00:00+00:00",
-            "last_updated": "2024-01-01T12:00:00+00:00"
+            "last_updated": "2024-01-01T12:00:00+00:00",
         }
 
         entities = await _get_entities(
-            mock_registry, mock_db, mock_api,
+            mock_registry,
+            mock_db,
+            mock_api,
             search=None,
             include_options={"state"},
             history_timeframe=None,
-            limit=None
+            limit=None,
         )
 
         assert len(entities) == 1
@@ -179,10 +178,7 @@ class TestEntitiesCommand:
         mock_api = AsyncMock()
 
         mock_registry._entity_registry = [
-            {
-                "entity_id": "sensor.temperature",
-                "friendly_name": "Temperature"
-            }
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"}
         ]
 
         history_timeframe = datetime.now() - timedelta(hours=24)
@@ -190,29 +186,29 @@ class TestEntitiesCommand:
             {
                 "entity_id": "sensor.temperature",
                 "state": "19.0",
-                "last_changed": "2024-01-01T11:00:00+00:00"
+                "last_changed": "2024-01-01T11:00:00+00:00",
             },
             {
                 "entity_id": "sensor.temperature",
                 "state": "20.5",
-                "last_changed": "2024-01-01T12:00:00+00:00"
-            }
+                "last_changed": "2024-01-01T12:00:00+00:00",
+            },
         ]
 
         entities = await _get_entities(
-            mock_registry, mock_db, mock_api,
+            mock_registry,
+            mock_db,
+            mock_api,
             search=None,
             include_options={"history"},
             history_timeframe=history_timeframe,
-            limit=None
+            limit=None,
         )
 
         assert len(entities) == 1
         assert entities[0]["history_count"] == 2
         assert len(entities[0]["history"]) == 2
         assert entities[0]["history"][0]["state"] == "19.0"
-
-    
 
     @pytest.mark.asyncio
     async def test_get_entities_with_metadata(self):
@@ -228,17 +224,19 @@ class TestEntitiesCommand:
             "unit_of_measurement": "°C",
             "disabled_by": None,
             "hidden_by": None,
-            "original_issue_id": None
+            "original_issue_id": None,
         }
 
         mock_registry._entity_registry = [full_metadata]
 
         entities = await _get_entities(
-            mock_registry, mock_db, mock_api,
+            mock_registry,
+            mock_db,
+            mock_api,
             search=None,
             include_options={"metadata"},
             history_timeframe=None,
-            limit=None
+            limit=None,
         )
 
         assert len(entities) == 1
@@ -259,11 +257,13 @@ class TestEntitiesCommand:
         mock_registry._entity_registry = entities_list
 
         entities = await _get_entities(
-            mock_registry, mock_db, mock_api,
+            mock_registry,
+            mock_db,
+            mock_api,
             search=None,
             include_options=set(),
             history_timeframe=None,
-            limit=3
+            limit=3,
         )
 
         assert len(entities) == 3
@@ -278,20 +278,19 @@ class TestEntitiesCommand:
         mock_api = AsyncMock()
 
         mock_registry._entity_registry = [
-            {
-                "entity_id": "sensor.temperature",
-                "friendly_name": "Temperature"
-            }
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"}
         ]
 
         mock_api.get_entity_state.side_effect = Exception("API Error")
 
         entities = await _get_entities(
-            mock_registry, mock_db, mock_api,
+            mock_registry,
+            mock_db,
+            mock_api,
             search=None,
             include_options={"state"},
             history_timeframe=None,
-            limit=None
+            limit=None,
         )
 
         # Should still return entity, but without state data
@@ -306,21 +305,20 @@ class TestEntitiesCommand:
         mock_api = AsyncMock()
 
         mock_registry._entity_registry = [
-            {
-                "entity_id": "sensor.temperature",
-                "friendly_name": "Temperature"
-            }
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"}
         ]
 
         history_timeframe = datetime.now() - timedelta(hours=24)
         mock_db.get_entity_states.side_effect = Exception("Database Error")
 
         entities = await _get_entities(
-            mock_registry, mock_db, mock_api,
+            mock_registry,
+            mock_db,
+            mock_api,
             search=None,
             include_options={"history"},
             history_timeframe=history_timeframe,
-            limit=None
+            limit=None,
         )
 
         # Should still return entity with error info instead of silently failing
@@ -338,11 +336,11 @@ class TestEntitiesCommand:
                 "friendly_name": "Temperature",
                 "domain": "sensor",
                 "device_class": "temperature",
-                "unit_of_measurement": "°C"
+                "unit_of_measurement": "°C",
             }
         ]
 
-        with patch('builtins.print') as mock_print:
+        with patch("builtins.print") as mock_print:
             await _output_results(entities_data, "markdown", set())
 
             mock_print.assert_called_once()
@@ -357,17 +355,18 @@ class TestEntitiesCommand:
             {
                 "entity_id": "sensor.temperature",
                 "friendly_name": "Temperature",
-                "domain": "sensor"
+                "domain": "sensor",
             }
         ]
 
-        with patch('builtins.print') as mock_print:
+        with patch("builtins.print") as mock_print:
             await _output_results(entities_data, "json", set())
 
             mock_print.assert_called_once()
             call_args = mock_print.call_args[0][0]
             # Check that it's valid JSON
             import json
+
             parsed = json.loads(call_args)
             assert len(parsed) == 1
             assert parsed[0]["entity_id"] == "sensor.temperature"
@@ -381,18 +380,18 @@ class TestEntitiesCommand:
                 "friendly_name": "Temperature",
                 "domain": "sensor",
                 "current_state": "20.5",
-                "history_count": 5
+                "history_count": 5,
             }
         ]
 
-        with patch('ha_tools.commands.entities._output_table_format') as mock_table:
+        with patch("ha_tools.commands.entities._output_table_format") as mock_table:
             await _output_results(entities_data, "table", {"state", "history"})
 
             mock_table.assert_called_once_with(entities_data, {"state", "history"})
 
     def test_output_table_format_empty(self):
         """Test table format with no entities."""
-        with patch('builtins.print') as mock_print:
+        with patch("builtins.print") as mock_print:
             _output_table_format([], set())
             mock_print.assert_called_with("No entities found.")
 
@@ -403,17 +402,17 @@ class TestEntitiesCommand:
                 "entity_id": "sensor.temperature",
                 "friendly_name": "Temperature",
                 "domain": "sensor",
-                "current_state": "20.5"
+                "current_state": "20.5",
             }
         ]
 
-        with patch('rich.console.Console.print') as mock_console_print:
+        with patch("rich.console.Console.print") as mock_console_print:
             _output_table_format(entities_data, set())
 
             mock_console_print.assert_called_once()
             # Check that a table object was printed
             call_args = mock_console_print.call_args[0][0]
-            assert hasattr(call_args, 'add_column')  # Rich table object
+            assert hasattr(call_args, "add_column")  # Rich table object
 
     def test_output_table_format_with_history(self):
         """Test table format with history column."""
@@ -423,11 +422,11 @@ class TestEntitiesCommand:
                 "friendly_name": "Temperature",
                 "domain": "sensor",
                 "current_state": "20.5",
-                "history_count": 10
+                "history_count": 10,
             }
         ]
 
-        with patch('rich.console.Console.print') as mock_console_print:
+        with patch("rich.console.Console.print") as mock_console_print:
             _output_table_format(entities_data, {"history"})
 
             mock_console_print.assert_called_once()
@@ -436,7 +435,7 @@ class TestEntitiesCommand:
         """Test markdown format with no entities."""
         entities_data = []
 
-        with patch('builtins.print') as mock_print:
+        with patch("builtins.print") as mock_print:
             _output_markdown_format(entities_data, set())
 
             mock_print.assert_called_once()
@@ -451,11 +450,11 @@ class TestEntitiesCommand:
                 "friendly_name": "Temperature",
                 "domain": "sensor",
                 "device_class": "temperature",
-                "unit_of_measurement": "°C"
+                "unit_of_measurement": "°C",
             }
         ]
 
-        with patch('builtins.print') as mock_print:
+        with patch("builtins.print") as mock_print:
             _output_markdown_format(entities_data, set())
 
             mock_print.assert_called_once()
@@ -478,17 +477,20 @@ class TestEntitiesCommand:
                 "history_count": 15,
                 "relations": {
                     "area": {"name": "Living Room"},
-                    "device": {"name": "Weather Station", "manufacturer": "Test Corp"}
-                }
+                    "device": {"name": "Weather Station", "manufacturer": "Test Corp"},
+                },
             }
         ]
 
-        with patch('builtins.print') as mock_print:
+        with patch("builtins.print") as mock_print:
             _output_markdown_format(entities_data, {"state", "history", "relations"})
 
             mock_print.assert_called_once()
             call_args = mock_print.call_args[0][0]
-            assert "Found **1** entities with history data with current state with relations" in call_args
+            assert (
+                "Found **1** entities with history data with current state with relations"
+                in call_args
+            )
             assert "Current State" in call_args
             assert "History Count" in call_args
             assert "Detailed Information" in call_args
@@ -500,7 +502,6 @@ class TestMultiPatternSearch:
     def test_search_single_pattern(self):
         """Test single pattern search (backward compatibility)."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
@@ -520,7 +521,6 @@ class TestMultiPatternSearch:
     def test_search_multiple_patterns(self):
         """Test multiple patterns with | separator."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
@@ -541,7 +541,6 @@ class TestMultiPatternSearch:
     def test_search_patterns_with_spaces(self):
         """Test patterns with spaces around |."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
@@ -558,7 +557,6 @@ class TestMultiPatternSearch:
     def test_search_empty_patterns_filtered(self):
         """Test that empty patterns are filtered out."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
@@ -576,7 +574,6 @@ class TestMultiPatternSearch:
     def test_search_all_empty_patterns(self):
         """Test that all-empty patterns return empty list."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
@@ -592,7 +589,6 @@ class TestMultiPatternSearch:
     def test_search_case_insensitive(self):
         """Test that multi-pattern search is case insensitive."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
@@ -608,7 +604,6 @@ class TestMultiPatternSearch:
     def test_search_no_duplicates(self):
         """Test that entities matching multiple patterns appear only once."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
@@ -629,11 +624,13 @@ class TestWildcardSearch:
     def test_wildcard_basic(self):
         """Test basic wildcard matching."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
-            {"entity_id": "script.wohnzimmer_saugen", "friendly_name": "Vacuum Living Room"},
+            {
+                "entity_id": "script.wohnzimmer_saugen",
+                "friendly_name": "Vacuum Living Room",
+            },
             {"entity_id": "script.kueche_saugen", "friendly_name": "Vacuum Kitchen"},
             {"entity_id": "sensor.temperature", "friendly_name": "Temperature"},
         ]
@@ -650,12 +647,14 @@ class TestWildcardSearch:
     def test_wildcard_at_end(self):
         """Test wildcard at end of pattern."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
             {"entity_id": "sensor.temperature_living", "friendly_name": "Temp Living"},
-            {"entity_id": "sensor.temperature_bedroom", "friendly_name": "Temp Bedroom"},
+            {
+                "entity_id": "sensor.temperature_bedroom",
+                "friendly_name": "Temp Bedroom",
+            },
             {"entity_id": "sensor.humidity", "friendly_name": "Humidity"},
         ]
 
@@ -668,12 +667,14 @@ class TestWildcardSearch:
     def test_wildcard_at_start(self):
         """Test wildcard at start of pattern."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
             {"entity_id": "sensor.living_temperature", "friendly_name": "Living Temp"},
-            {"entity_id": "sensor.bedroom_temperature", "friendly_name": "Bedroom Temp"},
+            {
+                "entity_id": "sensor.bedroom_temperature",
+                "friendly_name": "Bedroom Temp",
+            },
             {"entity_id": "sensor.humidity", "friendly_name": "Humidity"},
         ]
 
@@ -686,12 +687,17 @@ class TestWildcardSearch:
     def test_wildcard_multiple(self):
         """Test multiple wildcards in pattern."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
-            {"entity_id": "sensor.living_room_temperature", "friendly_name": "Living Temp"},
-            {"entity_id": "sensor.bedroom_temperature", "friendly_name": "Bedroom Temp"},
+            {
+                "entity_id": "sensor.living_room_temperature",
+                "friendly_name": "Living Temp",
+            },
+            {
+                "entity_id": "sensor.bedroom_temperature",
+                "friendly_name": "Bedroom Temp",
+            },
             {"entity_id": "switch.living_room_light", "friendly_name": "Living Light"},
         ]
 
@@ -705,7 +711,6 @@ class TestWildcardSearch:
     def test_wildcard_with_or(self):
         """Test wildcard combined with OR patterns."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
@@ -726,7 +731,6 @@ class TestWildcardSearch:
     def test_no_wildcard_still_works(self):
         """Test that patterns without wildcards still work (backward compatibility)."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._entity_registry = [
@@ -744,7 +748,6 @@ class TestWildcardSearch:
     def test_pattern_matches_helper(self):
         """Test the _pattern_matches helper directly."""
         from ha_tools.lib.registry import RegistryManager
-        from unittest.mock import MagicMock
 
         registry = MagicMock(spec=RegistryManager)
         registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
@@ -759,6 +762,7 @@ class TestWildcardSearch:
         assert registry._pattern_matches("sensor.*temp*", "sensor.living_temperature")
 
         # Wildcard non-matches
-        assert not registry._pattern_matches("script.*saugen", "script.wohnzimmer_kochen")
+        assert not registry._pattern_matches(
+            "script.*saugen", "script.wohnzimmer_kochen"
+        )
         assert not registry._pattern_matches("sensor.temp*", "switch.temperature")
-
