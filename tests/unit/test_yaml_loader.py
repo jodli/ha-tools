@@ -4,7 +4,6 @@ Unit tests for ha-tools YAML loader.
 Tests Home Assistant custom YAML tag support (!include, !secret, etc.).
 """
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -12,7 +11,6 @@ import yaml
 
 from ha_tools.lib.yaml_loader import (
     HA_YAML_TAGS,
-    HAYAMLLoader,
     load_secrets,
     load_yaml,
     load_yaml_file,

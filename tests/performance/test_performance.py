@@ -5,16 +5,16 @@ Tests performance characteristics, memory usage, and response times.
 """
 
 import asyncio
-import tempfile
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
-from ha_tools.config import HaToolsConfig, DatabaseConfig, HomeAssistantConfig
-from ha_tools.lib.database import DatabaseManager
 from ha_tools.commands.entities import _get_entities
+from ha_tools.config import DatabaseConfig, HaToolsConfig
+from ha_tools.lib.database import DatabaseManager
 
 
 class TestDatabasePerformance:
@@ -59,7 +59,7 @@ class TestDatabasePerformance:
         for i in range(100):
             await db.execute_query(
                 "INSERT INTO states_meta (metadata_id, entity_id) VALUES (?, ?)",
-                (i, f"sensor.test_{i}")
+                (i, f"sensor.test_{i}"),
             )
 
         # Insert test data
@@ -74,14 +74,14 @@ class TestDatabasePerformance:
             # Insert attributes
             await db.execute_query(
                 "INSERT INTO state_attributes (attributes_id, shared_attrs) VALUES (?, ?)",
-                (i, attrs)
+                (i, attrs),
             )
 
             # Insert state
             ts = (base_time - timedelta(minutes=i)).timestamp()
             await db.execute_query(
                 "INSERT INTO states (state_id, metadata_id, attributes_id, state, last_changed_ts, last_updated_ts) VALUES (?, ?, ?, ?, ?, ?)",
-                (i, metadata_id, i, str(i % 50), ts, ts)
+                (i, metadata_id, i, str(i % 50), ts, ts),
             )
         insert_time = time.time() - start_time
 
@@ -93,7 +93,7 @@ class TestDatabasePerformance:
         results = await db.get_entity_states(
             entity_id="sensor.test_1",
             start_time=base_time - timedelta(hours=1),
-            limit=100
+            limit=100,
         )
         query_time = time.time() - start_time
 
@@ -108,7 +108,7 @@ class TestDatabasePerformance:
         """Test database connection pool performance."""
         config = DatabaseConfig(url="mysql://user:pass@localhost:3306/test")
 
-        with patch('asyncmy.create_pool') as mock_create_pool:
+        with patch("asyncmy.create_pool") as mock_create_pool:
             mock_pool = AsyncMock()
             mock_create_pool.return_value = mock_pool
 
@@ -136,14 +136,16 @@ class TestEntityDiscoveryPerformance:
         # Create 500 entities
         large_entity_registry = []
         for i in range(500):
-            large_entity_registry.append({
-                "entity_id": f"sensor.test_{i}",
-                "friendly_name": f"Test Sensor {i}",
-                "device_class": "temperature" if i % 2 == 0 else "humidity",
-                "unit_of_measurement": "°C" if i % 2 == 0 else "%",
-                "area_id": f"area_{i % 10}" if i % 5 == 0 else None,
-                "device_id": f"device_{i % 20}"
-            })
+            large_entity_registry.append(
+                {
+                    "entity_id": f"sensor.test_{i}",
+                    "friendly_name": f"Test Sensor {i}",
+                    "device_class": "temperature" if i % 2 == 0 else "humidity",
+                    "unit_of_measurement": "°C" if i % 2 == 0 else "%",
+                    "area_id": f"area_{i % 10}" if i % 5 == 0 else None,
+                    "device_id": f"device_{i % 20}",
+                }
+            )
 
         mock_registry._entity_registry = large_entity_registry
 
@@ -152,17 +154,19 @@ class TestEntityDiscoveryPerformance:
             "entity_id": "sensor.test_1",
             "state": "20.5",
             "attributes": {"unit_of_measurement": "°C"},
-            "last_changed": "2024-01-01T12:00:00+00:00"
+            "last_changed": "2024-01-01T12:00:00+00:00",
         }
 
         start_time = time.time()
 
         entities = await _get_entities(
-            mock_registry, mock_db, mock_api,
+            mock_registry,
+            mock_db,
+            mock_api,
             search=None,
             include_options={"state"},
             history_timeframe=None,
-            limit=100
+            limit=100,
         )
 
         processing_time = time.time() - start_time
@@ -183,24 +187,30 @@ class TestEntityDiscoveryPerformance:
         entity_registry = []
         patterns = ["temp", "humidity", "light", "switch", "motion"]
 
-        for i, pattern in enumerate(patterns):
+        for _i, pattern in enumerate(patterns):
             for j in range(100):  # 100 entities per pattern
-                entity_registry.append({
-                    "entity_id": f"sensor.{pattern}_{j}",
-                    "friendly_name": f"{pattern.capitalize()} Sensor {j}",
-                    "device_class": pattern
-                })
+                entity_registry.append(
+                    {
+                        "entity_id": f"sensor.{pattern}_{j}",
+                        "friendly_name": f"{pattern.capitalize()} Sensor {j}",
+                        "device_class": pattern,
+                    }
+                )
 
-        mock_registry.search_entities.return_value = entity_registry[:100]  # Return subset
+        mock_registry.search_entities.return_value = entity_registry[
+            :100
+        ]  # Return subset
 
         start_time = time.time()
 
-        entities = await _get_entities(
-            mock_registry, mock_db, mock_api,
+        await _get_entities(
+            mock_registry,
+            mock_db,
+            mock_api,
             search="sensor.temp_*",
             include_options=set(),
             history_timeframe=None,
-            limit=None
+            limit=None,
         )
 
         search_time = time.time() - start_time
@@ -220,7 +230,7 @@ class TestEntityDiscoveryPerformance:
         entity_registry = [
             {
                 "entity_id": f"sensor.concurrent_{i}",
-                "friendly_name": f"Concurrent Sensor {i}"
+                "friendly_name": f"Concurrent Sensor {i}",
             }
             for i in range(50)
         ]
@@ -233,7 +243,7 @@ class TestEntityDiscoveryPerformance:
             return {
                 "entity_id": entity_id,
                 "state": "20.0",
-                "attributes": {"unit_of_measurement": "°C"}
+                "attributes": {"unit_of_measurement": "°C"},
             }
 
         mock_api.get_entity_state.side_effect = mock_get_state
@@ -241,11 +251,13 @@ class TestEntityDiscoveryPerformance:
         start_time = time.time()
 
         entities = await _get_entities(
-            mock_registry, mock_db, mock_api,
+            mock_registry,
+            mock_db,
+            mock_api,
             search=None,
             include_options={"state"},
             history_timeframe=None,
-            limit=None
+            limit=None,
         )
 
         total_time = time.time() - start_time
@@ -277,25 +289,27 @@ class TestMemoryUsage:
         large_history = []
         base_time = datetime.now() - timedelta(days=365)
         for i in range(1000):
-            large_history.append({
-                "entity_id": "sensor.memory_test",
-                "state": str(20 + (i % 10)),
-                "last_changed": (base_time + timedelta(hours=i)).isoformat(),
-                "attributes": f'{{"index": {i}, "large_data": "x" * 100}}'  # 100 bytes per record
-            })
+            large_history.append(
+                {
+                    "entity_id": "sensor.memory_test",
+                    "state": str(20 + (i % 10)),
+                    "last_changed": (base_time + timedelta(hours=i)).isoformat(),
+                    "attributes": f'{{"index": {i}, "large_data": "x" * 100}}',  # 100 bytes per record
+                }
+            )
 
         mock_db.get_entity_states.return_value = large_history
 
         # Measure memory usage (approximate)
-        import sys
-        entities_before = None
 
         entities = await _get_entities(
-            mock_registry, mock_db, mock_api,
+            mock_registry,
+            mock_db,
+            mock_api,
             search=None,
             include_options={"history"},
             history_timeframe=datetime.now() - timedelta(days=1),
-            limit=None
+            limit=None,
         )
 
         # Basic sanity check
@@ -328,7 +342,7 @@ class TestScalabilityBenchmarks:
             entity_registry = [
                 {
                     "entity_id": f"sensor.scale_test_{i}",
-                    "friendly_name": f"Scale Test Sensor {i}"
+                    "friendly_name": f"Scale Test Sensor {i}",
                 }
                 for i in range(count)
             ]
@@ -339,11 +353,13 @@ class TestScalabilityBenchmarks:
             start_time = time.time()
 
             entities = await _get_entities(
-                mock_registry, mock_db, mock_api,
+                mock_registry,
+                mock_db,
+                mock_api,
                 search=None,
                 include_options=set(),
                 history_timeframe=None,
-                limit=None
+                limit=None,
             )
 
             processing_time = time.time() - start_time
@@ -352,10 +368,14 @@ class TestScalabilityBenchmarks:
             print(f"Processed {count} entities in {processing_time:.3f} seconds")
 
             assert len(entities) == count
-            assert processing_time < count * 0.01  # Should scale linearly but reasonably
+            assert (
+                processing_time < count * 0.01
+            )  # Should scale linearly but reasonably
 
         # Verify reasonable scaling (not exponential)
-        assert performance_results[500] < performance_results[10] * 10  # Less than 10x slower for 50x more entities
+        assert (
+            performance_results[500] < performance_results[10] * 10
+        )  # Less than 10x slower for 50x more entities
 
     def test_configuration_loading_performance(self, temp_dir: Path):
         """Test configuration loading performance."""
@@ -364,20 +384,17 @@ class TestScalabilityBenchmarks:
             "home_assistant": {
                 "url": "http://localhost:8123",
                 "access_token": "test_token",
-                "timeout": 30
+                "timeout": 30,
             },
-            "database": {
-                "url": "sqlite:///test.db",
-                "pool_size": 10,
-                "timeout": 30
-            },
+            "database": {"url": "sqlite:///test.db", "pool_size": 10, "timeout": 30},
             "ha_config_path": str(temp_dir),
             "output_format": "markdown",
-            "verbose": False
+            "verbose": False,
         }
 
         config_file = temp_dir / "performance_config.yaml"
         import yaml
+
         with open(config_file, "w") as f:
             yaml.dump(config_data, f)
 
@@ -385,7 +402,7 @@ class TestScalabilityBenchmarks:
         start_time = time.time()
         for _ in range(100):  # Load 100 times
             HaToolsConfig.set_config_path(config_file)
-            config = HaToolsConfig.load()
+            HaToolsConfig.load()
         loading_time = time.time() - start_time
 
         avg_time = loading_time / 100

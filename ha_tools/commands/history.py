@@ -9,9 +9,7 @@ import csv
 import io
 import json
 import sys
-import time
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import typer
 
@@ -19,12 +17,12 @@ from ..config import HaToolsConfig
 from ..lib.database import DatabaseManager
 from ..lib.output import (
     MarkdownFormatter,
+    format_timestamp,
+    is_verbose,
     print_error,
-    print_warning,
     print_verbose,
     print_verbose_timing,
-    is_verbose,
-    format_timestamp,
+    print_warning,
 )
 from ..lib.utils import parse_timeframe
 
@@ -44,28 +42,28 @@ HA_DEFAULT_ATTRIBUTES = {
 
 def history_command(
     entity_id: str = typer.Argument(
-        ...,
-        help="Entity ID to analyze history for (e.g., sensor.temperature)"
+        ..., help="Entity ID to analyze history for (e.g., sensor.temperature)"
     ),
     timeframe: str = typer.Option(
         "24h",
-        "--timeframe", "-t",
-        help="History timeframe: Nm (minutes), Nh (hours), Nd (days), Nw (weeks)"
+        "--timeframe",
+        "-t",
+        help="History timeframe: Nm (minutes), Nh (hours), Nd (days), Nw (weeks)",
     ),
     limit: int = typer.Option(
         100,
-        "--limit", "-l",
-        help="Maximum number of records to return (-1 for no limit)"
+        "--limit",
+        "-l",
+        help="Maximum number of records to return (-1 for no limit)",
     ),
     stats: bool = typer.Option(
         False,
-        "--stats", "-s",
-        help="Include statistics (min/max/avg for numeric, state counts for non-numeric)"
+        "--stats",
+        "-s",
+        help="Include statistics (min/max/avg for numeric, state counts for non-numeric)",
     ),
     format: str = typer.Option(
-        "markdown",
-        "--format", "-f",
-        help="Output format (markdown, json, csv)"
+        "markdown", "--format", "-f", help="Output format (markdown, json, csv)"
     ),
 ) -> None:
     """
@@ -80,7 +78,9 @@ def history_command(
         ha-tools history switch.light --format csv --limit -1
     """
     try:
-        exit_code = asyncio.run(_run_history_command(entity_id, timeframe, limit, stats, format))
+        exit_code = asyncio.run(
+            _run_history_command(entity_id, timeframe, limit, stats, format)
+        )
         sys.exit(exit_code)
     except KeyboardInterrupt:
         print_error("History analysis cancelled")
@@ -91,11 +91,7 @@ def history_command(
 
 
 async def _run_history_command(
-    entity_id: str,
-    timeframe: str,
-    limit: int,
-    stats: bool,
-    format: str
+    entity_id: str, timeframe: str, limit: int, stats: bool, format: str
 ) -> int:
     """Run the history command."""
     # Load configuration
@@ -128,21 +124,27 @@ async def _run_history_command(
             return 4
 
         # Query states with stats in verbose mode
-        start_query = time.time()
         result = await db.get_entity_states(
             entity_id=entity_id,
             start_time=start_time,
             limit=query_limit,
-            include_stats=is_verbose()
+            include_stats=is_verbose(),
         )
 
+        states: list[dict[str, Any]]
         if is_verbose() and isinstance(result, tuple):
             states, query_stats = result
             print_verbose_timing("History query", query_stats.get("query_time_ms", 0))
-            print_verbose(f"Total records for entity: {query_stats.get('total_records', 0):,}")
-            print_verbose(f"Records in timeframe: {query_stats.get('filtered_count', 0):,}")
-        else:
+            print_verbose(
+                f"Total records for entity: {query_stats.get('total_records', 0):,}"
+            )
+            print_verbose(
+                f"Records in timeframe: {query_stats.get('filtered_count', 0):,}"
+            )
+        elif isinstance(result, list):
             states = result
+        else:
+            states = result[0]  # Extract list from tuple
 
         # Handle empty results
         if not states:
@@ -160,14 +162,14 @@ async def _run_history_command(
     return 0
 
 
-def _compute_statistics(states: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _compute_statistics(states: list[dict[str, Any]]) -> dict[str, Any]:
     """Compute statistics from state records.
 
     For numeric states: min, max, avg
     For non-numeric states: state change counts
     """
     numeric_values = []
-    state_counts: Dict[str, int] = {}
+    state_counts: dict[str, int] = {}
 
     for state in states:
         state_value = state.get("state", "")
@@ -201,11 +203,11 @@ def _compute_statistics(states: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _output_results(
-    states: List[Dict[str, Any]],
+    states: list[dict[str, Any]],
     format: str,
     entity_id: str,
     timeframe: str,
-    stats_data: Optional[Dict[str, Any]]
+    stats_data: dict[str, Any] | None,
 ) -> None:
     """Output results in the specified format."""
     if format == "json":
@@ -217,10 +219,10 @@ def _output_results(
 
 
 def _output_markdown_format(
-    states: List[Dict[str, Any]],
+    states: list[dict[str, Any]],
     entity_id: str,
     timeframe: str,
-    stats_data: Optional[Dict[str, Any]]
+    stats_data: dict[str, Any] | None,
 ) -> None:
     """Output states in markdown format."""
     formatter = MarkdownFormatter(title=f"History: {entity_id}")
@@ -242,9 +244,7 @@ def _output_markdown_format(
         else:
             stats_lines.append("**State Distribution:**")
             for state_val, count in sorted(
-                stats_data["state_counts"].items(),
-                key=lambda x: x[1],
-                reverse=True
+                stats_data["state_counts"].items(), key=lambda x: x[1], reverse=True
             ):
                 pct = (count / stats_data["total_records"]) * 100
                 stats_lines.append(f"- `{state_val}`: {count} ({pct:.1f}%)")
@@ -255,25 +255,30 @@ def _output_markdown_format(
     headers = ["Timestamp", "State", "Changed"]
     rows = []
     for state in states[:50]:  # Limit table rows for readability
-        rows.append([
-            format_timestamp(state.get("last_updated")),
-            state.get("state", "N/A"),
-            format_timestamp(state.get("last_changed")),
-        ])
+        rows.append(
+            [
+                format_timestamp(state.get("last_updated")),
+                state.get("state", "N/A"),
+                format_timestamp(state.get("last_changed")),
+            ]
+        )
 
     formatter.add_table(headers, rows, "State History")
 
     if len(states) > 50:
-        formatter.add_section("", f"*... and {len(states) - 50} more records (use --format csv for full data)*")
+        formatter.add_section(
+            "",
+            f"*... and {len(states) - 50} more records (use --format csv for full data)*",
+        )
 
     print(formatter.format())
 
 
 def _output_json_format(
-    states: List[Dict[str, Any]],
+    states: list[dict[str, Any]],
     entity_id: str,
     timeframe: str,
-    stats_data: Optional[Dict[str, Any]]
+    stats_data: dict[str, Any] | None,
 ) -> None:
     """Output states in JSON format."""
     output = {
@@ -289,14 +294,14 @@ def _output_json_format(
     print(json.dumps(output, indent=2, default=str))
 
 
-def _output_csv_format(states: List[Dict[str, Any]]) -> None:
+def _output_csv_format(states: list[dict[str, Any]]) -> None:
     """Output states in CSV format with dynamic attribute columns."""
     if not states:
         return
 
     # Collect all attribute keys from all states
     all_attr_keys: set[str] = set()
-    parsed_attrs: List[Dict[str, Any]] = []
+    parsed_attrs: list[dict[str, Any]] = []
 
     for state in states:
         attrs_raw = state.get("attributes", "{}")
@@ -321,7 +326,7 @@ def _output_csv_format(states: List[Dict[str, Any]]) -> None:
     writer = csv.writer(output)
     writer.writerow(headers)
 
-    for state, attrs in zip(states, parsed_attrs):
+    for state, attrs in zip(states, parsed_attrs, strict=False):
         row = [
             state.get("last_updated", ""),
             state.get("state", ""),
@@ -331,7 +336,7 @@ def _output_csv_format(states: List[Dict[str, Any]]) -> None:
         for key in attr_keys:
             value = attrs.get(key, "")
             # Convert complex types to JSON strings
-            if isinstance(value, (dict, list)):
+            if isinstance(value, dict | list):
                 value = json.dumps(value)
             row.append(value)
         writer.writerow(row)

@@ -163,4 +163,3 @@ The modular architecture supports future extensions:
 - Package operations: `ha-tools packages list|analyze`
 - Template validation: `ha-tools template validate <file>`
 - Advanced analytics: `ha-tools stats entity <id>`
-

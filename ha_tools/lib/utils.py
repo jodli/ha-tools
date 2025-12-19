@@ -40,8 +40,12 @@ def parse_timeframe(timeframe: str) -> datetime:
             weeks = int(timeframe[:-1])
             return datetime.now() - timedelta(weeks=weeks)
         else:
-            raise ValueError(f"Invalid timeframe format: {timeframe}. Use h (hours), d (days), m (minutes), or w (weeks).")
+            raise ValueError(
+                f"Invalid timeframe format: {timeframe}. Use h (hours), d (days), m (minutes), or w (weeks)."
+            )
     except ValueError as e:
         if "Invalid timeframe format" in str(e):
             raise
-        raise ValueError(f"Invalid timeframe format: {timeframe}. Use h (hours), d (days), m (minutes), or w (weeks).") from e
+        raise ValueError(
+            f"Invalid timeframe format: {timeframe}. Use h (hours), d (days), m (minutes), or w (weeks)."
+        ) from e

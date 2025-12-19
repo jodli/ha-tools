@@ -39,10 +39,10 @@ dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
-    "black>=23.10.0",
     "ruff>=0.1.6",
     "mypy>=1.7.0",
     "types-PyYAML",
+    "pre-commit>=3.6.0",
 ]
 
 [project.scripts]
@@ -57,14 +57,11 @@ Issues = "https://github.com/home-assistant/ha-tools/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["ha_tools"]
 
-[tool.black]
-line-length = 88
-target-version = ["py311"]
-include = '\.pyi?$'
-
 [tool.ruff]
 target-version = "py311"
 line-length = 88
+
+[tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
@@ -75,12 +72,16 @@ select = [
     "UP", # pyupgrade
 ]
 ignore = [
-    "E501",  # line too long, handled by black
+    "E501",  # line too long, handled by formatter
     "B008",  # do not perform function calls in argument defaults
 ]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.mypy]
 python_version = "3.11"
@@ -91,6 +92,10 @@ disallow_untyped_defs = true
 no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["asyncmy.*", "asyncpg.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

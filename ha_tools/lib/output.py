@@ -5,16 +5,14 @@ Provides structured markdown output optimized for AI consumption with progressiv
 """
 
 import json
-import sys
-from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
+from typing import Any
 
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.progress import Progress, TaskID
-from rich.text import Text
 from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import Progress
+from rich.table import Table
 
 console = Console()
 
@@ -68,17 +66,18 @@ def print_info(message: str) -> None:
 class MarkdownFormatter:
     """Format output as structured markdown optimized for AI consumption."""
 
-    def __init__(self, title: Optional[str] = None):
+    def __init__(self, title: str | None = None):
         self.title = title
-        self.sections = []
+        self.sections: list[str] = []
 
     def add_section(self, title: str, content: str, level: int = 2) -> None:
         """Add a markdown section."""
         header = "#" * level + f" {title}"
         self.sections.append(f"{header}\n{content}")
 
-    def add_table(self, headers: List[str], rows: List[List[str]],
-                  title: Optional[str] = None) -> None:
+    def add_table(
+        self, headers: list[str], rows: list[list[str]], title: str | None = None
+    ) -> None:
         """Add a markdown table."""
         if not rows:
             return
@@ -99,8 +98,9 @@ class MarkdownFormatter:
 
         self.sections.append("\n".join(table_content))
 
-    def add_code_block(self, code: str, language: Optional[str] = None,
-                      title: Optional[str] = None) -> None:
+    def add_code_block(
+        self, code: str, language: str | None = None, title: str | None = None
+    ) -> None:
         """Add a code block."""
         if title:
             self.sections.append(f"### {title}")
@@ -108,8 +108,9 @@ class MarkdownFormatter:
         lang = language or ""
         self.sections.append(f"```{lang}\n{code}\n```")
 
-    def add_list(self, items: List[str], ordered: bool = False,
-                title: Optional[str] = None) -> None:
+    def add_list(
+        self, items: list[str], ordered: bool = False, title: str | None = None
+    ) -> None:
         """Add a list."""
         if title:
             self.sections.append(f"### {title}")
@@ -123,7 +124,9 @@ class MarkdownFormatter:
 
     def add_collapsible(self, summary: str, content: str) -> None:
         """Add a collapsible section (HTML details tag)."""
-        self.sections.append(f"<details>\n<summary>{summary}</summary>\n\n{content}\n</details>")
+        self.sections.append(
+            f"<details>\n<summary>{summary}</summary>\n\n{content}\n</details>"
+        )
 
     def format(self) -> str:
         """Return the complete markdown content."""
@@ -140,8 +143,7 @@ class RichOutput:
     """Rich console output utilities."""
 
     @staticmethod
-    def create_table(title: str, headers: List[str],
-                    rows: List[List[str]]) -> Table:
+    def create_table(title: str, headers: list[str], rows: list[list[str]]) -> Table:
         """Create a rich table."""
         table = Table(title=title, box=box.ROUNDED)
         for header in headers:
@@ -156,8 +158,9 @@ class RichOutput:
         return table
 
     @staticmethod
-    def create_panel(content: str, title: Optional[str] = None,
-                    style: str = "blue") -> Panel:
+    def create_panel(
+        content: str, title: str | None = None, style: str = "blue"
+    ) -> Panel:
         """Create a rich panel."""
         return Panel(content, title=title, border_style=style)
 
@@ -167,27 +170,30 @@ class RichOutput:
         return Progress()
 
 
-def format_timestamp(timestamp: Optional[Union[str, datetime]]) -> str:
+def format_timestamp(timestamp: str | datetime | None) -> str:
     """Format timestamp for display."""
     if not timestamp:
         return "Never"
 
+    dt: datetime
     if isinstance(timestamp, str):
         try:
-            timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
         except ValueError:
             return timestamp
+    else:
+        dt = timestamp
 
-    return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def format_duration(seconds: Optional[float]) -> str:
+def format_duration(seconds: float | None) -> str:
     """Format duration in human-readable format."""
     if not seconds:
         return "N/A"
 
     if seconds < 1:
-        return f"{seconds*1000:.0f}ms"
+        return f"{seconds * 1000:.0f}ms"
     elif seconds < 60:
         return f"{seconds:.1f}s"
     elif seconds < 3600:
@@ -219,9 +225,8 @@ def output_json(data: Any, pretty: bool = True) -> str:
     return json.dumps(data, default=str)
 
 
-def truncate_text(text: str, max_length: int = 100,
-                 suffix: str = "...") -> str:
+def truncate_text(text: str, max_length: int = 100, suffix: str = "...") -> str:
     """Truncate text to specified length."""
     if len(text) <= max_length:
         return text
-    return text[:max_length - len(suffix)] + suffix
+    return text[: max_length - len(suffix)] + suffix

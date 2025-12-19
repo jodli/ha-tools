@@ -8,7 +8,7 @@ Provides ID-to-name mapping and metadata extraction.
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from ..config import HaToolsConfig
 from .output import print_warning
@@ -19,23 +19,23 @@ class RegistryManager:
 
     def __init__(self, config: HaToolsConfig):
         self.config = config
-        self._entity_registry: Optional[List[Dict[str, Any]]] = None
-        self._area_registry: Optional[List[Dict[str, Any]]] = None
-        self._device_registry: Optional[List[Dict[str, Any]]] = None
-        self._entity_id_to_name: Optional[Dict[str, str]] = None
-        self._area_id_to_name: Optional[Dict[str, str]] = None
+        self._entity_registry: list[dict[str, Any]] | None = None
+        self._area_registry: list[dict[str, Any]] | None = None
+        self._device_registry: list[dict[str, Any]] | None = None
+        self._entity_id_to_name: dict[str, str] | None = None
+        self._area_id_to_name: dict[str, str] | None = None
 
     @property
     def storage_path(self) -> Path:
         """Get the path to Home Assistant storage directory."""
         return Path(self.config.ha_config_path) / ".storage"
 
-    def _load_registry_file(self, filename: str) -> Optional[Dict[str, Any]]:
+    def _load_registry_file(self, filename: str) -> dict[str, Any] | None:
         """Load a registry file from storage."""
         registry_path = self.storage_path / filename
         try:
             if registry_path.exists():
-                with open(registry_path, "r", encoding="utf-8") as f:
+                with open(registry_path, encoding="utf-8") as f:
                     data = json.load(f)
                 return data.get("data", {})
             else:
@@ -45,7 +45,9 @@ class RegistryManager:
             print_warning(f"Failed to load registry {filename}: {e}")
             return None
 
-    async def load_entity_registry(self, fallback_api: Optional[Any] = None) -> List[Dict[str, Any]]:
+    async def load_entity_registry(
+        self, fallback_api: Any | None = None
+    ) -> list[dict[str, Any]]:
         """Load entity registry from storage or API fallback."""
         if self._entity_registry is not None:
             return self._entity_registry
@@ -67,7 +69,9 @@ class RegistryManager:
 
         return self._entity_registry
 
-    async def load_area_registry(self, fallback_api: Optional[Any] = None) -> List[Dict[str, Any]]:
+    async def load_area_registry(
+        self, fallback_api: Any | None = None
+    ) -> list[dict[str, Any]]:
         """Load area registry from storage or API fallback."""
         if self._area_registry is not None:
             return self._area_registry
@@ -89,7 +93,9 @@ class RegistryManager:
 
         return self._area_registry
 
-    async def load_device_registry(self, fallback_api: Optional[Any] = None) -> List[Dict[str, Any]]:
+    async def load_device_registry(
+        self, fallback_api: Any | None = None
+    ) -> list[dict[str, Any]]:
         """Load device registry from storage or API fallback."""
         if self._device_registry is not None:
             return self._device_registry
@@ -111,27 +117,31 @@ class RegistryManager:
 
         return self._device_registry
 
-    async def load_all_registries(self, fallback_api: Optional[Any] = None) -> None:
+    async def load_all_registries(self, fallback_api: Any | None = None) -> None:
         """Load all registries."""
         await self.load_entity_registry(fallback_api)
         await self.load_area_registry(fallback_api)
         await self.load_device_registry(fallback_api)
 
-    async def get_entity_name(self, entity_id: str, fallback_api: Optional[Any] = None) -> str:
+    async def get_entity_name(
+        self, entity_id: str, fallback_api: Any | None = None
+    ) -> str:
         """Get friendly name for entity ID."""
         if self._entity_id_to_name is None:
             await self._build_entity_mappings(fallback_api)
 
+        assert self._entity_id_to_name is not None
         return self._entity_id_to_name.get(entity_id, entity_id)
 
-    async def get_area_name(self, area_id: str, fallback_api: Optional[Any] = None) -> str:
+    async def get_area_name(self, area_id: str, fallback_api: Any | None = None) -> str:
         """Get friendly name for area ID."""
         if self._area_id_to_name is None:
             await self._build_area_mappings(fallback_api)
 
+        assert self._area_id_to_name is not None
         return self._area_id_to_name.get(area_id, area_id)
 
-    async def _build_entity_mappings(self, fallback_api: Optional[Any] = None) -> None:
+    async def _build_entity_mappings(self, fallback_api: Any | None = None) -> None:
         """Build entity ID to name mappings."""
         self._entity_id_to_name = {}
         entity_registry = await self.load_entity_registry(fallback_api)
@@ -150,7 +160,7 @@ class RegistryManager:
                         name = object_id.replace("_", " ").title()
                         self._entity_id_to_name[entity_id] = name
 
-    async def _build_area_mappings(self, fallback_api: Optional[Any] = None) -> None:
+    async def _build_area_mappings(self, fallback_api: Any | None = None) -> None:
         """Build area ID to name mappings."""
         self._area_id_to_name = {}
         area_registry = await self.load_area_registry(fallback_api)
@@ -161,43 +171,47 @@ class RegistryManager:
                 name = area.get("name", area_id)
                 self._area_id_to_name[area_id] = name
 
-    def get_entities_by_domain(self, domain: str) -> List[Dict[str, Any]]:
+    def get_entities_by_domain(self, domain: str) -> list[dict[str, Any]]:
         """Get all entities for a specific domain."""
         if not self._entity_registry:
             return []
 
         return [
-            entity for entity in self._entity_registry
+            entity
+            for entity in self._entity_registry
             if entity["entity_id"].startswith(f"{domain}.")
         ]
 
-    def get_entities_by_area(self, area_id: str) -> List[Dict[str, Any]]:
+    def get_entities_by_area(self, area_id: str) -> list[dict[str, Any]]:
         """Get all entities in a specific area."""
         if not self._entity_registry:
             return []
 
         return [
-            entity for entity in self._entity_registry
+            entity
+            for entity in self._entity_registry
             if entity.get("area_id") == area_id
         ]
 
-    def get_entities_by_device(self, device_id: str) -> List[Dict[str, Any]]:
+    def get_entities_by_device(self, device_id: str) -> list[dict[str, Any]]:
         """Get all entities for a specific device."""
         if not self._entity_registry:
             return []
 
         return [
-            entity for entity in self._entity_registry
+            entity
+            for entity in self._entity_registry
             if entity.get("device_id") == device_id
         ]
 
-    def get_device_by_area(self, area_id: str) -> List[Dict[str, Any]]:
+    def get_device_by_area(self, area_id: str) -> list[dict[str, Any]]:
         """Get all devices in a specific area."""
         if not self._device_registry:
             return []
 
         return [
-            device for device in self._device_registry
+            device
+            for device in self._device_registry
             if area_id in device.get("area_id", [])
         ]
 
@@ -212,13 +226,15 @@ class RegistryManager:
             "script.*saugen" matches "script.wohnzimmer_saugen" (wildcard)
             "*vacuum*" matches "robot_vacuum_cleaner" (wildcard)
         """
-        if '*' not in pattern:
+        if "*" not in pattern:
             return pattern in value  # Fast path: substring match
         # Convert glob-style * to regex .*
-        regex = re.escape(pattern).replace(r'\*', '.*')
+        regex = re.escape(pattern).replace(r"\*", ".*")
         return bool(re.search(regex, value))
 
-    def search_entities(self, pattern: str, search_fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    def search_entities(
+        self, pattern: str, search_fields: list[str] | None = None
+    ) -> list[dict[str, Any]]:
         """Search entities by pattern.
 
         Supports multiple patterns separated by | (OR matching).
@@ -256,7 +272,7 @@ class RegistryManager:
 
         return results
 
-    def get_entity_metadata(self, entity_id: str) -> Dict[str, Any]:
+    def get_entity_metadata(self, entity_id: str) -> dict[str, Any]:
         """Get comprehensive metadata for an entity."""
         if not self._entity_registry:
             return {}
@@ -267,7 +283,7 @@ class RegistryManager:
 
         return {}
 
-    def get_area_metadata(self, area_id: str) -> Dict[str, Any]:
+    def get_area_metadata(self, area_id: str) -> dict[str, Any]:
         """Get comprehensive metadata for an area."""
         if not self._area_registry:
             return {}
@@ -279,7 +295,7 @@ class RegistryManager:
 
         return {}
 
-    def get_device_metadata(self, device_id: str) -> Dict[str, Any]:
+    def get_device_metadata(self, device_id: str) -> dict[str, Any]:
         """Get comprehensive metadata for a device."""
         if not self._device_registry:
             return {}
@@ -291,12 +307,12 @@ class RegistryManager:
 
         return {}
 
-    def get_entity_statistics(self) -> Dict[str, Any]:
+    def get_entity_statistics(self) -> dict[str, Any]:
         """Get statistics about loaded entities."""
         if not self._entity_registry:
             return {}
 
-        domains = {}
+        domains: dict[str, int] = {}
         disabled = 0
         hidden = 0
 
@@ -317,23 +333,25 @@ class RegistryManager:
             "enabled_entities": len(self._entity_registry) - disabled - hidden,
         }
 
-    def get_area_statistics(self) -> Dict[str, Any]:
+    def get_area_statistics(self) -> dict[str, Any]:
         """Get statistics about loaded areas."""
         if not self._area_registry:
             return {}
 
         return {
             "total_areas": len(self._area_registry),
-            "area_names": [area.get("name", area["area_id"]) for area in self._area_registry],
+            "area_names": [
+                area.get("name", area["area_id"]) for area in self._area_registry
+            ],
         }
 
-    def get_device_statistics(self) -> Dict[str, Any]:
+    def get_device_statistics(self) -> dict[str, Any]:
         """Get statistics about loaded devices."""
         if not self._device_registry:
             return {}
 
-        manufacturers = {}
-        models = {}
+        manufacturers: dict[str, int] = {}
+        models: dict[str, int] = {}
 
         for device in self._device_registry:
             manufacturer = device.get("manufacturer", "Unknown")

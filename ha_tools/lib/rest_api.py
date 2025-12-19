@@ -5,12 +5,11 @@ Provides async access to Home Assistant API with authentication and rate limitin
 Used for real-time state and validation when database access isn't sufficient.
 """
 
-import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiohttp
-from aiohttp import ClientResponse, ClientSession, ClientTimeout
+from aiohttp import ClientSession, ClientTimeout
 
 from ..config import HomeAssistantConfig
 from .output import print_warning
@@ -21,7 +20,7 @@ class HomeAssistantAPI:
 
     def __init__(self, config: HomeAssistantConfig):
         self.config = config
-        self._session: Optional[ClientSession] = None
+        self._session: ClientSession | None = None
         self._base_url = config.url.rstrip("/")
         self._headers = {
             "Authorization": f"Bearer {config.access_token}",
@@ -35,7 +34,7 @@ class HomeAssistantAPI:
             self._session = ClientSession(
                 headers=self._headers,
                 timeout=self._timeout,
-                connector=aiohttp.TCPConnector(limit=10, limit_per_host=5)
+                connector=aiohttp.TCPConnector(limit=10, limit_per_host=5),
             )
         return self._session
 
@@ -54,7 +53,7 @@ class HomeAssistantAPI:
                     return
             raise RuntimeError(f"API test failed: HTTP {response.status}")
 
-    async def get_states(self) -> List[Dict[str, Any]]:
+    async def get_states(self) -> list[dict[str, Any]]:
         """Get all current entity states from Home Assistant."""
         session = await self._get_session()
         async with session.get(f"{self._base_url}/api/states") as response:
@@ -62,20 +61,25 @@ class HomeAssistantAPI:
                 raise RuntimeError(f"Failed to get states: HTTP {response.status}")
             return await response.json()
 
-    async def get_entity_state(self, entity_id: str) -> Optional[Dict[str, Any]]:
+    async def get_entity_state(self, entity_id: str) -> dict[str, Any] | None:
         """Get current state for a specific entity."""
         session = await self._get_session()
         async with session.get(f"{self._base_url}/api/states/{entity_id}") as response:
             if response.status == 404:
                 return None
             if response.status != 200:
-                raise RuntimeError(f"Failed to get entity {entity_id}: HTTP {response.status}")
+                raise RuntimeError(
+                    f"Failed to get entity {entity_id}: HTTP {response.status}"
+                )
             return await response.json()
 
-    async def get_entity_history(self, entity_id: str,
-                               start_time: Optional[datetime] = None,
-                               end_time: Optional[datetime] = None,
-                               minimal_response: bool = True) -> List[Dict[str, Any]]:
+    async def get_entity_history(
+        self,
+        entity_id: str,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+        minimal_response: bool = True,
+    ) -> list[dict[str, Any]]:
         """
         Get historical state data for an entity.
 
@@ -95,10 +99,12 @@ class HomeAssistantAPI:
 
         async with session.get(url, params=params) as response:
             if response.status != 200:
-                raise RuntimeError(f"Failed to get history for {entity_id}: HTTP {response.status}")
+                raise RuntimeError(
+                    f"Failed to get history for {entity_id}: HTTP {response.status}"
+                )
             return await response.json()
 
-    async def get_config(self) -> Dict[str, Any]:
+    async def get_config(self) -> dict[str, Any]:
         """Get Home Assistant configuration."""
         session = await self._get_session()
         async with session.get(f"{self._base_url}/api/config") as response:
@@ -106,15 +112,17 @@ class HomeAssistantAPI:
                 raise RuntimeError(f"Failed to get config: HTTP {response.status}")
             return await response.json()
 
-    async def validate_config(self) -> Dict[str, Any]:
+    async def validate_config(self) -> dict[str, Any]:
         """Validate Home Assistant configuration."""
         session = await self._get_session()
-        async with session.post(f"{self._base_url}/api/config/core/check_config") as response:
+        async with session.post(
+            f"{self._base_url}/api/config/core/check_config"
+        ) as response:
             if response.status != 200:
                 raise RuntimeError(f"Failed to validate config: HTTP {response.status}")
             return await response.json()
 
-    async def get_errors(self) -> List[Dict[str, Any]]:
+    async def get_errors(self) -> list[dict[str, Any]]:
         """
         Get current Home Assistant errors from the error log.
 
@@ -140,7 +148,9 @@ class HomeAssistantAPI:
 
         # Fall back to Supervisor API for HA OS/Supervised
         try:
-            async with session.get(f"{self._base_url}/api/hassio/core/logs") as response:
+            async with session.get(
+                f"{self._base_url}/api/hassio/core/logs"
+            ) as response:
                 if response.status == 200:
                     log_text = await response.text()
                     # Strip ANSI color codes from Supervisor logs
@@ -154,16 +164,17 @@ class HomeAssistantAPI:
     def _strip_ansi_codes(self, text: str) -> str:
         """Remove ANSI escape codes from text."""
         import re
-        ansi_pattern = re.compile(r'\x1b\[[0-9;]*m')
-        return ansi_pattern.sub('', text)
 
-    def _parse_error_log(self, log_text: str) -> List[Dict[str, Any]]:
+        ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
+        return ansi_pattern.sub("", text)
+
+    def _parse_error_log(self, log_text: str) -> list[dict[str, Any]]:
         """Parse error log text into structured error records."""
         import re
         from datetime import datetime
 
-        errors: List[Dict[str, Any]] = []
-        current_error: Optional[Dict[str, Any]] = None
+        errors: list[dict[str, Any]] = []
+        current_error: dict[str, Any] | None = None
 
         for line in log_text.splitlines():
             if not line.strip():
@@ -176,7 +187,7 @@ class HomeAssistantAPI:
                 r"\(([^)]+)\)\s+"
                 r"\[([^\]]+)\]\s*"
                 r"(.*)",
-                line
+                line,
             )
 
             if match:
@@ -195,7 +206,7 @@ class HomeAssistantAPI:
                     "level": level,
                     "source": source,
                     "message": message,
-                    "context": []
+                    "context": [],
                 }
             elif current_error:
                 # Continuation line (traceback, etc.)
@@ -210,7 +221,7 @@ class HomeAssistantAPI:
 
         return errors[-50:]  # Return most recent 50 errors
 
-    async def get_services(self) -> Dict[str, Any]:
+    async def get_services(self) -> dict[str, Any]:
         """Get all available services."""
         session = await self._get_session()
         async with session.get(f"{self._base_url}/api/services") as response:
@@ -218,41 +229,48 @@ class HomeAssistantAPI:
                 raise RuntimeError(f"Failed to get services: HTTP {response.status}")
             return await response.json()
 
-    async def get_entity_registry(self) -> List[Dict[str, Any]]:
+    async def get_entity_registry(self) -> list[dict[str, Any]]:
         """Get entity registry data."""
         try:
             session = await self._get_session()
-            async with session.get(f"{self._base_url}/api/config/registry/entity") as response:
+            async with session.get(
+                f"{self._base_url}/api/config/registry/entity"
+            ) as response:
                 if response.status == 200:
                     return await response.json()
         except Exception as e:
             print_warning(f"Could not fetch entity registry via API: {e}")
         return []
 
-    async def get_area_registry(self) -> List[Dict[str, Any]]:
+    async def get_area_registry(self) -> list[dict[str, Any]]:
         """Get area registry data."""
         try:
             session = await self._get_session()
-            async with session.get(f"{self._base_url}/api/config/registry/area") as response:
+            async with session.get(
+                f"{self._base_url}/api/config/registry/area"
+            ) as response:
                 if response.status == 200:
                     return await response.json()
         except Exception as e:
             print_warning(f"Could not fetch area registry via API: {e}")
         return []
 
-    async def get_device_registry(self) -> List[Dict[str, Any]]:
+    async def get_device_registry(self) -> list[dict[str, Any]]:
         """Get device registry data."""
         try:
             session = await self._get_session()
-            async with session.get(f"{self._base_url}/api/config/registry/device") as response:
+            async with session.get(
+                f"{self._base_url}/api/config/registry/device"
+            ) as response:
                 if response.status == 200:
                     return await response.json()
         except Exception as e:
             print_warning(f"Could not fetch device registry via API: {e}")
         return []
 
-    async def call_service(self, domain: str, service: str,
-                          service_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def call_service(
+        self, domain: str, service: str, service_data: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Call a Home Assistant service."""
         session = await self._get_session()
         url = f"{self._base_url}/api/services/{domain}/{service}"
@@ -260,25 +278,29 @@ class HomeAssistantAPI:
 
         async with session.post(url, json=data) as response:
             if response.status not in [200, 201]:
-                raise RuntimeError(f"Failed to call service {domain}.{service}: HTTP {response.status}")
+                raise RuntimeError(
+                    f"Failed to call service {domain}.{service}: HTTP {response.status}"
+                )
             return await response.json()
 
     async def reload_core_config(self) -> None:
         """Reload core Home Assistant configuration."""
         await self.call_service("homeassistant", "reload_core_config")
 
-    async def get_integration_info(self) -> Dict[str, Any]:
+    async def get_integration_info(self) -> dict[str, Any]:
         """Get information about installed integrations."""
         try:
             session = await self._get_session()
-            async with session.get(f"{self._base_url}/api/config/integrations") as response:
+            async with session.get(
+                f"{self._base_url}/api/config/integrations"
+            ) as response:
                 if response.status == 200:
                     return await response.json()
         except Exception as e:
             print_warning(f"Could not fetch integration info: {e}")
         return {}
 
-    async def get_logs(self, timeframe: Optional[str] = None) -> str:
+    async def get_logs(self, timeframe: str | None = None) -> str:
         """Get Home Assistant logs."""
         try:
             session = await self._get_session()
@@ -294,10 +316,13 @@ class HomeAssistantAPI:
             print_warning(f"Could not fetch logs via API: {e}")
         return ""
 
-    async def get_statistics(self, statistic_ids: Optional[List[str]] = None,
-                           period: Optional[str] = None,
-                           start_time: Optional[datetime] = None,
-                           end_time: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    async def get_statistics(
+        self,
+        statistic_ids: list[str] | None = None,
+        period: str | None = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+    ) -> list[dict[str, Any]]:
         """Get long-term statistics."""
         session = await self._get_session()
         url = f"{self._base_url}/api/history/period/statistics"
@@ -324,11 +349,16 @@ class HomeAssistantAPI:
         domain, object_id = entity_id.split(".", 1)
         return domain, object_id
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "HomeAssistantAPI":
         """Async context manager entry."""
         await self._get_session()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
         """Async context manager exit."""
         await self.close()
