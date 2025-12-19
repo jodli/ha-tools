@@ -30,9 +30,12 @@ uv run ha-tools setup
 uv run ha-tools validate --syntax-only  # Quick syntax check
 uv run ha-tools validate               # Full validation (2-3 min)
 
-# Entity discovery examples (--search uses substring matching)
+# Entity discovery examples (supports * wildcard and | for OR)
 uv run ha-tools entities                                       # Overview
-uv run ha-tools entities --search "temp"                       # Find entities with "temp" in ID
+uv run ha-tools entities --search "temp"                       # Substring match
+uv run ha-tools entities --search "temp|humidity"              # Multiple patterns (OR)
+uv run ha-tools entities --search "script.*saugen"             # Wildcard (* = any chars)
+uv run ha-tools entities --search "sensor.temp*|*humidity"     # Wildcards + OR combined
 uv run ha-tools entities --include history --history 7d        # With historical data
 uv run ha-tools entities --include state --search "sensor"     # Full state details
 uv run ha-tools entities --verbose                             # Show timing and debug info

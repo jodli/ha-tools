@@ -14,8 +14,10 @@ uv run ha-tools setup
 uv run ha-tools validate --syntax-only   # Quick syntax check
 uv run ha-tools validate                  # Full validation
 
-# Explore entities
+# Explore entities (supports * wildcard and | for OR)
 uv run ha-tools entities --search "temp"
+uv run ha-tools entities --search "temp|humidity"
+uv run ha-tools entities --search "script.*saugen"
 uv run ha-tools entities --include history --history 24h
 
 # Analyze history

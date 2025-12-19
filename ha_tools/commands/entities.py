@@ -28,7 +28,7 @@ def entities_command(
         None,
         "--search",
         "-s",
-        help="Search pattern (substring matching). Use | for multiple patterns: 'temp|humidity'"
+        help="Search pattern with * wildcard support. Use | for OR: 'temp|humidity' or 'script.*saugen'"
     ),
     include: Optional[str] = typer.Option(
         None,

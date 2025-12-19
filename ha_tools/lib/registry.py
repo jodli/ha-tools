@@ -6,6 +6,7 @@ Provides ID-to-name mapping and metadata extraction.
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -200,11 +201,33 @@ class RegistryManager:
             if area_id in device.get("area_id", [])
         ]
 
+    def _pattern_matches(self, pattern: str, value: str) -> bool:
+        """Match pattern against value. Supports * as wildcard.
+
+        If pattern contains no *, uses fast substring matching.
+        If pattern contains *, converts to regex where * matches any characters.
+
+        Examples:
+            "temp" matches "sensor.temperature" (substring)
+            "script.*saugen" matches "script.wohnzimmer_saugen" (wildcard)
+            "*vacuum*" matches "robot_vacuum_cleaner" (wildcard)
+        """
+        if '*' not in pattern:
+            return pattern in value  # Fast path: substring match
+        # Convert glob-style * to regex .*
+        regex = re.escape(pattern).replace(r'\*', '.*')
+        return bool(re.search(regex, value))
+
     def search_entities(self, pattern: str, search_fields: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Search entities by pattern.
 
         Supports multiple patterns separated by | (OR matching).
-        Example: "temp|humidity" matches entities containing "temp" OR "humidity".
+        Supports * as wildcard to match any characters.
+
+        Examples:
+            "temp|humidity" - matches entities containing "temp" OR "humidity"
+            "script.*saugen" - matches "script.wohnzimmer_saugen"
+            "sensor.temp*|sensor.humidity*" - combined wildcards and OR
         """
         if not self._entity_registry:
             return []
@@ -212,8 +235,8 @@ class RegistryManager:
         if search_fields is None:
             search_fields = ["entity_id", "friendly_name", "original_name"]
 
-        # Split on | for OR matching, strip whitespace and wildcards from each pattern
-        patterns = [p.strip().lower().replace("*", "") for p in pattern.split("|")]
+        # Split on | for OR matching, strip whitespace from each pattern
+        patterns = [p.strip().lower() for p in pattern.split("|")]
         patterns = [p for p in patterns if p]  # Remove empty patterns
 
         if not patterns:
@@ -227,7 +250,7 @@ class RegistryManager:
                 if value:
                     value_lower = value.lower()
                     # Match if ANY pattern matches
-                    if any(p in value_lower for p in patterns):
+                    if any(self._pattern_matches(p, value_lower) for p in patterns):
                         results.append(entity)
                         break
 
