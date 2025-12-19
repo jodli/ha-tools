@@ -97,7 +97,7 @@ ha_tools/
 ### Configuration Management
 
 - Location: `~/.ha-tools-config.yaml`
-- Database: Read-only access to MariaDB/PostgreSQL/SQLite
+- Database: Read-only access to MariaDB (SQLite/PostgreSQL support planned, see GitHub issues)
 - Home Assistant: URL + long-lived access token
 - Modern async/await patterns for database and API operations
 - Type hints throughout the codebase
