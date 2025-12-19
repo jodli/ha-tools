@@ -38,7 +38,7 @@ uv run ha-tools errors --current
 
 ## Key Features
 
-- **Fast**: Direct database access for history queries (MariaDB, PostgreSQL, SQLite)
+- **Fast**: Direct database access for history queries (MariaDB only, [SQLite](https://github.com/jodli/ha-tools/issues/1)/[PostgreSQL](https://github.com/jodli/ha-tools/issues/2) planned)
 - **AI-Optimized**: Structured markdown output, clear exit codes
 - **Flexible**: Timeframes like `24h`, `7d`, `30m`, `2w`
 
@@ -52,7 +52,7 @@ home_assistant:
   access_token: "your_token"
 
 database:
-  url: "sqlite:////config/home-assistant_v2.db"
+  url: "mysql://user:pass@localhost:3306/homeassistant"  # MariaDB only for now
 
 ha_config_path: "/config"
 ```
