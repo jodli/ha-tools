@@ -509,7 +509,8 @@ class TestMultiPatternSearch:
             {"entity_id": "switch.light", "friendly_name": "Light"},
         ]
 
-        # Call the real method
+        # Call the real methods
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
         registry.search_entities = RegistryManager.search_entities.__get__(registry)
 
         results = registry.search_entities("temp")
@@ -528,6 +529,7 @@ class TestMultiPatternSearch:
             {"entity_id": "switch.light", "friendly_name": "Light"},
         ]
 
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
         registry.search_entities = RegistryManager.search_entities.__get__(registry)
 
         results = registry.search_entities("temp|humidity")
@@ -547,6 +549,7 @@ class TestMultiPatternSearch:
             {"entity_id": "sensor.bedroom_temp", "friendly_name": "Bedroom"},
         ]
 
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
         registry.search_entities = RegistryManager.search_entities.__get__(registry)
 
         results = registry.search_entities("living | bedroom")
@@ -562,6 +565,7 @@ class TestMultiPatternSearch:
             {"entity_id": "sensor.temperature", "friendly_name": "Temperature"},
         ]
 
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
         registry.search_entities = RegistryManager.search_entities.__get__(registry)
 
         # Empty patterns between pipes should be ignored
@@ -579,6 +583,7 @@ class TestMultiPatternSearch:
             {"entity_id": "sensor.temperature", "friendly_name": "Temperature"},
         ]
 
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
         registry.search_entities = RegistryManager.search_entities.__get__(registry)
 
         results = registry.search_entities("|||")
@@ -594,6 +599,7 @@ class TestMultiPatternSearch:
             {"entity_id": "sensor.Temperature", "friendly_name": "TEMP Sensor"},
         ]
 
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
         registry.search_entities = RegistryManager.search_entities.__get__(registry)
 
         results = registry.search_entities("TEMP|temperature")
@@ -609,9 +615,150 @@ class TestMultiPatternSearch:
             {"entity_id": "sensor.temp_humidity", "friendly_name": "Temp and Humidity"},
         ]
 
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
         registry.search_entities = RegistryManager.search_entities.__get__(registry)
 
         # Entity matches both patterns but should only appear once
         results = registry.search_entities("temp|humidity")
         assert len(results) == 1
+
+
+class TestWildcardSearch:
+    """Test wildcard (*) search functionality."""
+
+    def test_wildcard_basic(self):
+        """Test basic wildcard matching."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "script.wohnzimmer_saugen", "friendly_name": "Vacuum Living Room"},
+            {"entity_id": "script.kueche_saugen", "friendly_name": "Vacuum Kitchen"},
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"},
+        ]
+
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        results = registry.search_entities("script.*saugen")
+        assert len(results) == 2
+        entity_ids = [r["entity_id"] for r in results]
+        assert "script.wohnzimmer_saugen" in entity_ids
+        assert "script.kueche_saugen" in entity_ids
+
+    def test_wildcard_at_end(self):
+        """Test wildcard at end of pattern."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "sensor.temperature_living", "friendly_name": "Temp Living"},
+            {"entity_id": "sensor.temperature_bedroom", "friendly_name": "Temp Bedroom"},
+            {"entity_id": "sensor.humidity", "friendly_name": "Humidity"},
+        ]
+
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        results = registry.search_entities("sensor.temperature*")
+        assert len(results) == 2
+
+    def test_wildcard_at_start(self):
+        """Test wildcard at start of pattern."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "sensor.living_temperature", "friendly_name": "Living Temp"},
+            {"entity_id": "sensor.bedroom_temperature", "friendly_name": "Bedroom Temp"},
+            {"entity_id": "sensor.humidity", "friendly_name": "Humidity"},
+        ]
+
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        results = registry.search_entities("*temperature")
+        assert len(results) == 2
+
+    def test_wildcard_multiple(self):
+        """Test multiple wildcards in pattern."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "sensor.living_room_temperature", "friendly_name": "Living Temp"},
+            {"entity_id": "sensor.bedroom_temperature", "friendly_name": "Bedroom Temp"},
+            {"entity_id": "switch.living_room_light", "friendly_name": "Living Light"},
+        ]
+
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        results = registry.search_entities("*living*temp*")
+        assert len(results) == 1
+        assert results[0]["entity_id"] == "sensor.living_room_temperature"
+
+    def test_wildcard_with_or(self):
+        """Test wildcard combined with OR patterns."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "script.wohnzimmer_saugen", "friendly_name": "Vacuum Living"},
+            {"entity_id": "script.kueche_kochen", "friendly_name": "Cook Kitchen"},
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"},
+        ]
+
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        results = registry.search_entities("script.*saugen|script.*kochen")
+        assert len(results) == 2
+        entity_ids = [r["entity_id"] for r in results]
+        assert "script.wohnzimmer_saugen" in entity_ids
+        assert "script.kueche_kochen" in entity_ids
+
+    def test_no_wildcard_still_works(self):
+        """Test that patterns without wildcards still work (backward compatibility)."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._entity_registry = [
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"},
+            {"entity_id": "sensor.humidity", "friendly_name": "Humidity"},
+        ]
+
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
+        registry.search_entities = RegistryManager.search_entities.__get__(registry)
+
+        results = registry.search_entities("temp")
+        assert len(results) == 1
+        assert results[0]["entity_id"] == "sensor.temperature"
+
+    def test_pattern_matches_helper(self):
+        """Test the _pattern_matches helper directly."""
+        from ha_tools.lib.registry import RegistryManager
+        from unittest.mock import MagicMock
+
+        registry = MagicMock(spec=RegistryManager)
+        registry._pattern_matches = RegistryManager._pattern_matches.__get__(registry)
+
+        # Substring match (no wildcard)
+        assert registry._pattern_matches("temp", "sensor.temperature")
+        assert not registry._pattern_matches("humid", "sensor.temperature")
+
+        # Wildcard matches
+        assert registry._pattern_matches("script.*saugen", "script.wohnzimmer_saugen")
+        assert registry._pattern_matches("*vacuum*", "robot_vacuum_cleaner")
+        assert registry._pattern_matches("sensor.*temp*", "sensor.living_temperature")
+
+        # Wildcard non-matches
+        assert not registry._pattern_matches("script.*saugen", "script.wohnzimmer_kochen")
+        assert not registry._pattern_matches("sensor.temp*", "switch.temperature")
 
