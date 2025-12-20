@@ -8,11 +8,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from rich import box
 from rich.console import Console
-from rich.panel import Panel
-from rich.progress import Progress
-from rich.table import Table
 
 console = Console()
 
@@ -139,37 +135,6 @@ class MarkdownFormatter:
         return "\n\n".join(content)
 
 
-class RichOutput:
-    """Rich console output utilities."""
-
-    @staticmethod
-    def create_table(title: str, headers: list[str], rows: list[list[str]]) -> Table:
-        """Create a rich table."""
-        table = Table(title=title, box=box.ROUNDED)
-        for header in headers:
-            table.add_column(header)
-
-        for row in rows:
-            # Pad row to match header count
-            while len(row) < len(headers):
-                row.append("")
-            table.add_row(*row)
-
-        return table
-
-    @staticmethod
-    def create_panel(
-        content: str, title: str | None = None, style: str = "blue"
-    ) -> Panel:
-        """Create a rich panel."""
-        return Panel(content, title=title, border_style=style)
-
-    @staticmethod
-    def create_progress() -> Progress:
-        """Create a progress bar."""
-        return Progress()
-
-
 def format_timestamp(timestamp: str | datetime | None) -> str:
     """Format timestamp for display."""
     if not timestamp:
@@ -187,46 +152,8 @@ def format_timestamp(timestamp: str | datetime | None) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def format_duration(seconds: float | None) -> str:
-    """Format duration in human-readable format."""
-    if not seconds:
-        return "N/A"
-
-    if seconds < 1:
-        return f"{seconds * 1000:.0f}ms"
-    elif seconds < 60:
-        return f"{seconds:.1f}s"
-    elif seconds < 3600:
-        minutes = int(seconds // 60)
-        secs = int(seconds % 60)
-        return f"{minutes}m {secs}s"
-    else:
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        return f"{hours}h {minutes}m"
-
-
-def format_file_size(size_bytes: int) -> str:
-    """Format file size in human-readable format."""
-    if size_bytes < 1024:
-        return f"{size_bytes}B"
-    elif size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.1f}KB"
-    elif size_bytes < 1024 * 1024 * 1024:
-        return f"{size_bytes / (1024 * 1024):.1f}MB"
-    else:
-        return f"{size_bytes / (1024 * 1024 * 1024):.1f}GB"
-
-
 def output_json(data: Any, pretty: bool = True) -> str:
     """Output data as JSON."""
     if pretty:
         return json.dumps(data, indent=2, default=str)
     return json.dumps(data, default=str)
-
-
-def truncate_text(text: str, max_length: int = 100, suffix: str = "...") -> str:
-    """Truncate text to specified length."""
-    if len(text) <= max_length:
-        return text
-    return text[: max_length - len(suffix)] + suffix

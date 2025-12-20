@@ -291,7 +291,9 @@ def _output_json_format(
     if stats_data:
         output["statistics"] = stats_data
 
-    print(json.dumps(output, indent=2, default=str))
+    from ..lib.output import output_json
+
+    print(output_json(output))
 
 
 def _output_csv_format(states: list[dict[str, Any]]) -> None:

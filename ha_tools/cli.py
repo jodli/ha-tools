@@ -10,7 +10,6 @@ import asyncio
 import sys
 
 import typer
-from rich.console import Console
 from typer import Context
 
 from . import __version__
@@ -19,7 +18,7 @@ from .commands.errors import errors_command
 from .commands.history import history_command
 from .commands.validate import validate_command
 from .config import HaToolsConfig
-from .lib.output import print_error, print_success, set_verbose
+from .lib.output import console, print_error, print_success, set_verbose
 
 # Create the main typer app
 app = typer.Typer(
@@ -83,8 +82,6 @@ app.command(name="validate")(validate_command)
 app.command(name="entities")(entities_command)
 app.command(name="errors")(errors_command)
 app.command(name="history")(history_command)
-
-console = Console()
 
 
 @app.command()

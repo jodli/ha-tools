@@ -11,12 +11,12 @@ from datetime import datetime
 from typing import Any
 
 import typer
-from rich.console import Console
 
 from ..config import HaToolsConfig
 from ..lib.database import DatabaseManager
 from ..lib.output import (
     MarkdownFormatter,
+    console,
     format_timestamp,
     is_verbose,
     print_error,
@@ -27,8 +27,6 @@ from ..lib.output import (
 from ..lib.registry import RegistryManager
 from ..lib.rest_api import HomeAssistantAPI
 from ..lib.utils import parse_timeframe
-
-console = Console()
 
 
 def entities_command(
@@ -296,9 +294,9 @@ async def _output_results(
 ) -> None:
     """Output entities data in specified format."""
     if format == "json":
-        import json
+        from ..lib.output import output_json
 
-        print(json.dumps(entities_data, indent=2, default=str))
+        print(output_json(entities_data))
     elif format == "table":
         _output_table_format(entities_data, include_options)
     else:  # markdown (default)
@@ -332,10 +330,8 @@ def _output_table_format(
         rows.append(row)
 
     # Use rich table for formatting
-    from rich.console import Console
     from rich.table import Table
 
-    console = Console()
     table = Table(title="Home Assistant Entities")
     for header in headers:
         table.add_column(header)

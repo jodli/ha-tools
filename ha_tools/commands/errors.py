@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 import typer
-from rich.console import Console
 
 from ..config import HaToolsConfig
 from ..lib.database import DatabaseManager
@@ -24,12 +23,11 @@ from ..lib.output import (
     print_info,
     print_verbose,
     print_verbose_timing,
+    print_warning,
 )
 from ..lib.registry import RegistryManager
 from ..lib.rest_api import HomeAssistantAPI
 from ..lib.utils import parse_timeframe
-
-console = Console()
 
 
 def errors_command(
@@ -115,8 +113,8 @@ async def _run_errors_command(
 
             # Check database availability and notify if not connected
             if not db.is_connected():
-                print_info(f"⚠️  Database unavailable: {db.get_connection_error()}")
-                print_info("ℹ️  Using API-only mode (limited functionality)")
+                print_warning(f"Database unavailable: {db.get_connection_error()}")
+                print_info("Using API-only mode (limited functionality)")
 
             # Load registry for correlation analysis
             if correlation and db.is_connected():
@@ -168,11 +166,11 @@ async def _collect_errors(
             api_errors = await api.get_errors()
             errors_data["api_errors"] = _filter_errors(api_errors, entity, integration)
         except Exception as e:
-            print_info(f"Could not fetch API errors: {e}")
+            print_warning(f"Could not fetch API errors: {e}")
 
         # If API returned no errors, fall back to reading log file for recent errors
         if not errors_data["api_errors"]:
-            print_info("API returned no errors, checking log file...")
+            print_verbose("API returned no errors, checking log file...")
             # Look at last 1 hour for "current" errors
             recent_timeframe = datetime.now() - timedelta(hours=1)
             log_errors = await _analyze_log_files(
@@ -261,7 +259,7 @@ async def _analyze_log_files(
             log_errors.extend(file_errors)
             print_verbose(f"Found {len(file_errors)} errors in {log_path}")
         except Exception as e:
-            print_info(f"Could not parse log file {log_path}: {e}")
+            print_warning(f"Could not parse log file {log_path}: {e}")
 
     # Sort by timestamp
     log_errors.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
@@ -469,9 +467,9 @@ async def _output_errors(
 ) -> None:
     """Output errors analysis in specified format."""
     if format == "json":
-        import json
+        from ..lib.output import output_json
 
-        print(json.dumps(errors_data, indent=2, default=str))
+        print(output_json(errors_data))
     else:  # markdown
         _output_markdown_format(errors_data, correlation)
 

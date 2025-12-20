@@ -12,12 +12,12 @@ from pathlib import Path
 from typing import Any
 
 import typer
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config import HaToolsConfig
 from ..lib.output import (
     MarkdownFormatter,
+    console,
     print_error,
     print_info,
     print_verbose,
@@ -25,8 +25,6 @@ from ..lib.output import (
 )
 from ..lib.rest_api import HomeAssistantAPI
 from ..lib.yaml_loader import load_secrets, load_yaml
-
-console = Console()
 
 
 def validate_command(
@@ -147,7 +145,7 @@ async def _run_syntax_validation(
     # Generate report
     _generate_syntax_report(formatter, errors, warnings)
 
-    console.print(formatter.format())
+    print(formatter.format())
 
     # Return exit code based on results
     if errors:
@@ -193,7 +191,7 @@ async def _run_full_validation(
         print_error(f"Failed to connect to Home Assistant: {e}")
         return 3  # Connection error
 
-    console.print(formatter.format())
+    print(formatter.format())
 
     return 0  # Success
 
