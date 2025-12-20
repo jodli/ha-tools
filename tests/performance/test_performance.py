@@ -21,89 +21,6 @@ class TestDatabasePerformance:
     """Test database layer performance."""
 
     @pytest.mark.asyncio
-    async def test_sqlite_query_performance(self, temp_dir: Path):
-        """Test SQLite query performance with large datasets."""
-        db_path = temp_dir / "performance_test.db"
-        config = DatabaseConfig(url=f"sqlite:///{db_path}")
-        db = DatabaseManager(config)
-
-        await db.connect()
-
-        # Create Home Assistant's modern schema (states_meta, states, state_attributes)
-        await db.execute_query("""
-            CREATE TABLE states_meta (
-                metadata_id INTEGER PRIMARY KEY,
-                entity_id TEXT UNIQUE
-            )
-        """)
-        await db.execute_query("""
-            CREATE TABLE state_attributes (
-                attributes_id INTEGER PRIMARY KEY,
-                shared_attrs TEXT
-            )
-        """)
-        await db.execute_query("""
-            CREATE TABLE states (
-                state_id INTEGER PRIMARY KEY,
-                metadata_id INTEGER,
-                attributes_id INTEGER,
-                state TEXT,
-                last_changed_ts REAL,
-                last_updated_ts REAL,
-                FOREIGN KEY (metadata_id) REFERENCES states_meta(metadata_id),
-                FOREIGN KEY (attributes_id) REFERENCES state_attributes(attributes_id)
-            )
-        """)
-
-        # Insert entity metadata (100 unique entities)
-        for i in range(100):
-            await db.execute_query(
-                "INSERT INTO states_meta (metadata_id, entity_id) VALUES (?, ?)",
-                (i, f"sensor.test_{i}"),
-            )
-
-        # Insert test data
-        base_time = datetime.now()
-
-        # Measure insert performance
-        start_time = time.time()
-        for i in range(1000):  # 1000 state records
-            metadata_id = i % 100  # Link to one of 100 entities
-            attrs = f'{{"index": {i}}}'
-
-            # Insert attributes
-            await db.execute_query(
-                "INSERT INTO state_attributes (attributes_id, shared_attrs) VALUES (?, ?)",
-                (i, attrs),
-            )
-
-            # Insert state
-            ts = (base_time - timedelta(minutes=i)).timestamp()
-            await db.execute_query(
-                "INSERT INTO states (state_id, metadata_id, attributes_id, state, last_changed_ts, last_updated_ts) VALUES (?, ?, ?, ?, ?, ?)",
-                (i, metadata_id, i, str(i % 50), ts, ts),
-            )
-        insert_time = time.time() - start_time
-
-        print(f"Inserted 1000 records in {insert_time:.3f} seconds")
-        assert insert_time < 5.0  # Should complete within 5 seconds
-
-        # Measure query performance
-        start_time = time.time()
-        results = await db.get_entity_states(
-            entity_id="sensor.test_1",
-            start_time=base_time - timedelta(hours=1),
-            limit=100,
-        )
-        query_time = time.time() - start_time
-
-        print(f"Queried entity states in {query_time:.3f} seconds")
-        assert query_time < 1.0  # Should complete within 1 second
-        assert len(results) <= 100  # Should respect limit
-
-        await db.close()
-
-    @pytest.mark.asyncio
     async def test_connection_pool_performance(self):
         """Test database connection pool performance."""
         config = DatabaseConfig(url="mysql://user:pass@localhost:3306/test")
@@ -386,7 +303,11 @@ class TestScalabilityBenchmarks:
                 "access_token": "test_token",
                 "timeout": 30,
             },
-            "database": {"url": "sqlite:///test.db", "pool_size": 10, "timeout": 30},
+            "database": {
+                "url": "mysql://user:pass@localhost:3306/db",
+                "pool_size": 10,
+                "timeout": 30,
+            },
             "ha_config_path": str(temp_dir),
             "output_format": "markdown",
             "verbose": False,
