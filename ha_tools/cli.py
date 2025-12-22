@@ -14,8 +14,8 @@ from typer import Context
 
 from . import __version__
 from .commands.entities import entities_command
-from .commands.errors import errors_command
 from .commands.history import history_command
+from .commands.logs import logs_command
 from .commands.validate import validate_command
 from .config import HaToolsConfig
 from .lib.output import console, print_error, print_success, set_verbose
@@ -57,7 +57,7 @@ def callback(
     Examples:
         ha-tools validate --syntax-only
         ha-tools entities --search "temp_*" --include history
-        ha-tools errors --current --log 24h
+        ha-tools logs --current --log 24h
     """
     # Handle version flag
     if version:
@@ -80,7 +80,7 @@ def callback(
 # Register command functions
 app.command(name="validate")(validate_command)
 app.command(name="entities")(entities_command)
-app.command(name="errors")(errors_command)
+app.command(name="logs")(logs_command)
 app.command(name="history")(history_command)
 
 

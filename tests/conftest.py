@@ -143,7 +143,7 @@ def mock_home_assistant_api():
         "last_updated": "2024-01-01T12:00:00+00:00",
     }
 
-    api.get_errors.return_value = []
+    api.get_logs.return_value = []
     api.validate_config.return_value = {"valid": True, "errors": [], "messages": []}
 
     return api

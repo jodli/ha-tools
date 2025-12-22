@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 
 from ha_tools.cli import app
 from ha_tools.commands.entities import _run_entities_command
-from ha_tools.commands.errors import _run_errors_command
+from ha_tools.commands.logs import _run_logs_command
 from ha_tools.commands.validate import _run_validation
 
 
@@ -36,7 +36,7 @@ class TestCLIIntegration:
         assert "High-performance CLI" in result.stdout
         assert "validate" in result.stdout
         assert "entities" in result.stdout
-        assert "errors" in result.stdout
+        assert "logs" in result.stdout
 
     def test_validate_command_help(self):
         """Test validate command help."""
@@ -53,13 +53,14 @@ class TestCLIIntegration:
         assert "--include" in result.stdout
         assert "--history" in result.stdout
 
-    def test_errors_command_help(self):
-        """Test errors command help."""
-        result = self.runner.invoke(app, ["errors", "--help"])
+    def test_logs_command_help(self):
+        """Test logs command help."""
+        result = self.runner.invoke(app, ["logs", "--help"])
         assert result.exit_code == 0
         assert "--current" in result.stdout
         assert "--log" in result.stdout
         assert "--entity" in result.stdout
+        assert "--level" in result.stdout
 
     @pytest.mark.asyncio
     async def test_validate_integration_success(
@@ -132,7 +133,7 @@ class TestCLIIntegration:
             assert result == 0
 
     @pytest.mark.asyncio
-    async def test_errors_integration_success(
+    async def test_logs_integration_success(
         self,
         test_config,
         mock_home_assistant_api,
@@ -140,14 +141,14 @@ class TestCLIIntegration:
         mock_registry_manager,
         sample_log_file: Path,
     ):
-        """Test full errors command integration."""
+        """Test full logs command integration."""
         # Update config to point to sample log
         test_config.ha_config_path = str(sample_log_file.parent)
 
         with (
-            patch("ha_tools.commands.errors.DatabaseManager") as mock_db_class,
-            patch("ha_tools.commands.errors.HomeAssistantAPI") as mock_api_class,
-            patch("ha_tools.commands.errors.RegistryManager") as mock_registry_class,
+            patch("ha_tools.commands.logs.DatabaseManager") as mock_db_class,
+            patch("ha_tools.commands.logs.HomeAssistantAPI") as mock_api_class,
+            patch("ha_tools.commands.logs.RegistryManager") as mock_registry_class,
         ):
             # Setup async context manager mocks with properly configured fixtures
             mock_db_class.return_value.__aenter__ = AsyncMock(
@@ -161,10 +162,11 @@ class TestCLIIntegration:
 
             mock_registry_class.return_value = mock_registry_manager
 
-            # Test current errors
-            result = await _run_errors_command(
+            # Test current logs
+            result = await _run_logs_command(
                 current=True,
                 log=None,
+                levels={"error", "warning"},
                 entity=None,
                 integration=None,
                 correlation=False,
@@ -173,9 +175,10 @@ class TestCLIIntegration:
             assert result == 0
 
             # Test log analysis
-            result = await _run_errors_command(
+            result = await _run_logs_command(
                 current=False,
                 log="24h",
+                levels={"error", "warning"},
                 entity="temperature",
                 integration=None,
                 correlation=True,
@@ -256,9 +259,10 @@ class TestCLIIntegration:
             )
             assert result == 3
 
-            result = await _run_errors_command(
+            result = await _run_logs_command(
                 current=False,
                 log=None,
+                levels={"error", "warning"},
                 entity=None,
                 integration=None,
                 correlation=False,
@@ -421,24 +425,22 @@ class TestEndToEndWorkflows:
         test_config.ha_config_path = str(sample_log_file.parent)
 
         with (
-            patch("ha_tools.commands.errors.DatabaseManager") as mock_errors_db_class,
+            patch("ha_tools.commands.logs.DatabaseManager") as mock_logs_db_class,
             patch(
                 "ha_tools.commands.entities.DatabaseManager"
             ) as mock_entities_db_class,
             patch(
                 "ha_tools.commands.entities.HomeAssistantAPI"
             ) as mock_entities_api_class,
-            patch("ha_tools.commands.errors.HomeAssistantAPI") as mock_errors_api_class,
+            patch("ha_tools.commands.logs.HomeAssistantAPI") as mock_logs_api_class,
             patch("ha_tools.commands.entities.RegistryManager") as mock_registry_class,
-            patch(
-                "ha_tools.commands.errors.RegistryManager"
-            ) as mock_error_registry_class,
+            patch("ha_tools.commands.logs.RegistryManager") as mock_logs_registry_class,
         ):
             # Setup database mocks with sync methods properly mocked
-            mock_errors_db_class.return_value.__aenter__ = AsyncMock(
+            mock_logs_db_class.return_value.__aenter__ = AsyncMock(
                 return_value=mock_database_manager
             )
-            mock_errors_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_logs_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
             mock_entities_db_class.return_value.__aenter__ = AsyncMock(
                 return_value=mock_database_manager
             )
@@ -451,13 +453,13 @@ class TestEndToEndWorkflows:
             mock_entities_api_class.return_value.__aexit__ = AsyncMock(
                 return_value=None
             )
-            mock_errors_api_class.return_value.__aenter__ = AsyncMock(
+            mock_logs_api_class.return_value.__aenter__ = AsyncMock(
                 return_value=mock_home_assistant_api
             )
-            mock_errors_api_class.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_logs_api_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_registry_class.return_value = mock_registry_manager
-            mock_error_registry_class.return_value = mock_registry_manager
+            mock_logs_registry_class.return_value = mock_registry_manager
 
             # User reports: "Heating automation stopped working"
 
@@ -471,16 +473,17 @@ class TestEndToEndWorkflows:
             )
             assert entities_result == 0
 
-            # Step 2: Look for related errors
-            errors_result = await _run_errors_command(
+            # Step 2: Look for related logs
+            logs_result = await _run_logs_command(
                 current=False,
                 log="24h",
+                levels={"error", "warning"},
                 entity="heizung*",
                 integration=None,
                 correlation=True,
                 format="markdown",
             )
-            assert errors_result == 0
+            assert logs_result == 0
 
             # Step 3: Analyze automation dependencies
             entities_result = await _run_entities_command(

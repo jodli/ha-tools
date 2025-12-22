@@ -632,7 +632,7 @@ ValueError: test error
             url="http://localhost:8123", access_token="test_token"
         )
         api = HomeAssistantAPI(config)
-        errors = api._parse_error_log(log_text)
+        errors = api._parse_error_log(log_text, {"error", "warning"})
 
         assert len(errors) == 2
         assert errors[0]["source"] == "homeassistant.core"
@@ -646,11 +646,11 @@ ValueError: test error
             url="http://localhost:8123", access_token="test_token"
         )
         api = HomeAssistantAPI(config)
-        errors = api._parse_error_log("")
+        errors = api._parse_error_log("", {"error", "warning"})
         assert errors == []
 
     def test_parse_error_log_filters_warnings(self):
-        """Test that WARNING level is filtered out."""
+        """Test that WARNING level is filtered out when not in levels set."""
         log_text = """2024-01-15 10:30:45 WARNING (MainThread) [test] Warning message
 2024-01-15 10:30:46 ERROR (MainThread) [test] Error message"""
 
@@ -658,13 +658,14 @@ ValueError: test error
             url="http://localhost:8123", access_token="test_token"
         )
         api = HomeAssistantAPI(config)
-        errors = api._parse_error_log(log_text)
+        # Only request error level - warnings should be filtered
+        errors = api._parse_error_log(log_text, {"error"})
 
         assert len(errors) == 1
         assert errors[0]["level"] == "ERROR"
 
     def test_parse_error_log_critical_included(self):
-        """Test that CRITICAL level is included."""
+        """Test that CRITICAL level is included when in levels set."""
         log_text = (
             """2024-01-15 10:30:45 CRITICAL (MainThread) [test] Critical message"""
         )
@@ -673,7 +674,7 @@ ValueError: test error
             url="http://localhost:8123", access_token="test_token"
         )
         api = HomeAssistantAPI(config)
-        errors = api._parse_error_log(log_text)
+        errors = api._parse_error_log(log_text, {"error", "critical"})
 
         assert len(errors) == 1
         assert errors[0]["level"] == "CRITICAL"
@@ -687,7 +688,7 @@ ValueError: test error
             url="http://localhost:8123", access_token="test_token"
         )
         api = HomeAssistantAPI(config)
-        errors = api._parse_error_log(log_text)
+        errors = api._parse_error_log(log_text, {"error"})
 
         assert len(errors) == 1
         assert errors[0]["timestamp"].year == 2024
@@ -711,7 +712,7 @@ KeyError: 'missing_key'"""
             url="http://localhost:8123", access_token="test_token"
         )
         api = HomeAssistantAPI(config)
-        errors = api._parse_error_log(log_text)
+        errors = api._parse_error_log(log_text, {"error"})
 
         assert len(errors) == 1
         assert errors[0]["source"] == "homeassistant.core"
@@ -733,7 +734,7 @@ KeyError: 'missing_key'"""
             url="http://localhost:8123", access_token="test_token"
         )
         api = HomeAssistantAPI(config)
-        errors = api._parse_error_log(log_text)
+        errors = api._parse_error_log(log_text, {"error"})
 
         assert len(errors) == 50
         # Should keep the most recent (last) 50
@@ -748,14 +749,14 @@ KeyError: 'missing_key'"""
             url="http://localhost:8123", access_token="test_token"
         )
         api = HomeAssistantAPI(config)
-        errors = api._parse_error_log(log_text)
+        errors = api._parse_error_log(log_text, {"error"})
 
         assert len(errors) == 1
         assert errors[0]["message"] == "No milliseconds"
 
     @pytest.mark.asyncio
-    async def test_get_errors_integration(self):
-        """Test get_errors() properly parses text response."""
+    async def test_get_logs_integration(self):
+        """Test get_logs() properly parses text response."""
         config = HomeAssistantConfig(
             url="http://localhost:8123", access_token="test_token"
         )
@@ -773,16 +774,16 @@ Additional context line"""
             mock_session_class.return_value = mock_session
             mock_connector_class.return_value = MagicMock()
 
-            errors = await api.get_errors()
+            logs = await api.get_logs({"error", "warning"})
 
-            assert len(errors) == 1
-            assert errors[0]["source"] == "test.component"
-            assert errors[0]["message"] == "Test error message"
-            assert len(errors[0]["context"]) == 1
+            assert len(logs) == 1
+            assert logs[0]["source"] == "test.component"
+            assert logs[0]["message"] == "Test error message"
+            assert len(logs[0]["context"]) == 1
 
     @pytest.mark.asyncio
-    async def test_get_errors_empty_response(self):
-        """Test get_errors() handles empty response."""
+    async def test_get_logs_empty_response(self):
+        """Test get_logs() handles empty response."""
         config = HomeAssistantConfig(
             url="http://localhost:8123", access_token="test_token"
         )
@@ -797,13 +798,13 @@ Additional context line"""
             mock_session_class.return_value = mock_session
             mock_connector_class.return_value = MagicMock()
 
-            errors = await api.get_errors()
+            logs = await api.get_logs({"error", "warning"})
 
-            assert errors == []
+            assert logs == []
 
     @pytest.mark.asyncio
-    async def test_get_errors_api_failure(self):
-        """Test get_errors() handles API failure gracefully."""
+    async def test_get_logs_api_failure(self):
+        """Test get_logs() handles API failure gracefully."""
         config = HomeAssistantConfig(
             url="http://localhost:8123", access_token="test_token"
         )
@@ -821,6 +822,6 @@ Additional context line"""
             mock_session_class.return_value = mock_session
             mock_connector_class.return_value = MagicMock()
 
-            errors = await api.get_errors()
+            logs = await api.get_logs({"error", "warning"})
 
-            assert errors == []
+            assert logs == []

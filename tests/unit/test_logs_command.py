@@ -1,7 +1,7 @@
 """
-Unit tests for ha-tools errors command.
+Unit tests for ha-tools logs command.
 
-Tests error analysis, log parsing, and correlation functionality.
+Tests log analysis, log parsing, and correlation functionality.
 """
 
 from datetime import datetime, timedelta
@@ -9,27 +9,28 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ha_tools.commands.errors import (
+from ha_tools.commands.logs import (
     _calculate_correlation_strength,
     _extract_entity_references,
     _filter_errors,
-    _run_errors_command,
+    _parse_level_options,
+    _run_logs_command,
 )
 from ha_tools.lib.utils import parse_timeframe
 
 
-class TestErrorsCommand:
-    """Test errors command functionality."""
+class TestLogsCommand:
+    """Test logs command functionality."""
 
     @pytest.mark.asyncio
-    async def test_run_errors_command_success(self, test_config):
-        """Test successful errors command execution."""
+    async def test_run_logs_command_success(self, test_config):
+        """Test successful logs command execution."""
         with (
-            patch("ha_tools.commands.errors.DatabaseManager") as mock_db_class,
-            patch("ha_tools.commands.errors.HomeAssistantAPI") as mock_api_class,
-            patch("ha_tools.commands.errors.RegistryManager") as mock_registry_class,
-            patch("ha_tools.commands.errors._collect_errors") as mock_collect,
-            patch("ha_tools.commands.errors._output_errors") as mock_output,
+            patch("ha_tools.commands.logs.DatabaseManager") as mock_db_class,
+            patch("ha_tools.commands.logs.HomeAssistantAPI") as mock_api_class,
+            patch("ha_tools.commands.logs.RegistryManager") as mock_registry_class,
+            patch("ha_tools.commands.logs._collect_errors") as mock_collect,
+            patch("ha_tools.commands.logs._output_errors") as mock_output,
         ):
             # Mock database and API
             mock_db = AsyncMock()
@@ -51,9 +52,10 @@ class TestErrorsCommand:
                 "correlations": [],
             }
 
-            result = await _run_errors_command(
+            result = await _run_logs_command(
                 current=False,
                 log="24h",
+                levels={"error", "warning"},
                 entity=None,
                 integration=None,
                 correlation=False,
@@ -173,3 +175,49 @@ class TestErrorsCommand:
 
         strength = _calculate_correlation_strength(error_time, state_changes)
         assert strength == 0.0
+
+
+class TestParseLevelOptions:
+    """Test level option parsing functionality."""
+
+    def test_parse_level_options_default(self):
+        """Test default level options when None provided."""
+        result = _parse_level_options(None)
+        assert result == {"error", "warning"}
+
+    def test_parse_level_options_single(self):
+        """Test parsing single level option."""
+        result = _parse_level_options("error")
+        assert result == {"error"}
+
+    def test_parse_level_options_multiple(self):
+        """Test parsing multiple level options."""
+        result = _parse_level_options("error,warning,critical")
+        assert result == {"error", "warning", "critical"}
+
+    def test_parse_level_options_with_spaces(self):
+        """Test parsing level options with spaces."""
+        result = _parse_level_options("error , warning , critical")
+        assert result == {"error", "warning", "critical"}
+
+    def test_parse_level_options_invalid_filtered(self):
+        """Test that invalid options are filtered out."""
+        result = _parse_level_options("error,invalid,warning")
+        assert result == {"error", "warning"}
+        assert "invalid" not in result
+
+    def test_parse_level_options_case_insensitive(self):
+        """Test that level options are case insensitive."""
+        result = _parse_level_options("ERROR,Warning,CRITICAL")
+        assert result == {"error", "warning", "critical"}
+
+    def test_parse_level_options_all_levels(self):
+        """Test parsing all valid level options."""
+        result = _parse_level_options("error,warning,critical,info,debug")
+        assert result == {"error", "warning", "critical", "info", "debug"}
+
+    def test_parse_level_options_empty_string(self):
+        """Test parsing empty string returns default (same as None)."""
+        result = _parse_level_options("")
+        # Empty string is falsy, so returns default {"error", "warning"}
+        assert result == {"error", "warning"}

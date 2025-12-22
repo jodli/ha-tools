@@ -1,7 +1,7 @@
 """
-Errors command for ha-tools.
+Logs command for ha-tools.
 
-Provides runtime error diagnostics with correlation to entity state changes.
+Provides runtime log analysis with correlation to entity state changes.
 """
 
 import asyncio
@@ -30,9 +30,20 @@ from ..lib.rest_api import HomeAssistantAPI
 from ..lib.utils import parse_timeframe
 
 
-def errors_command(
+def _parse_level_options(level: str | None) -> set[str]:
+    """Parse level options string into a set of valid levels."""
+    valid_levels = {"error", "warning", "critical", "info", "debug"}
+
+    if not level:
+        return {"error", "warning"}  # Default
+
+    options = {opt.strip().lower() for opt in level.split(",")}
+    return {opt for opt in options if opt in valid_levels}
+
+
+def logs_command(
     current: bool = typer.Option(
-        False, "--current", "-c", help="Show only current runtime errors"
+        False, "--current", "-c", help="Show only current runtime logs"
     ),
     log: str | None = typer.Option(
         None,
@@ -40,11 +51,17 @@ def errors_command(
         "-l",
         help="Timeframe for log analysis: Nh (hours), Nd (days), Nm (minutes), Nw (weeks)",
     ),
+    level: str | None = typer.Option(
+        None,
+        "--level",
+        "-L",
+        help="Log levels to include: error, warning, critical, info, debug (comma-separated). Default: error,warning",
+    ),
     entity: str | None = typer.Option(
-        None, "--entity", "-e", help="Filter errors for specific entity pattern"
+        None, "--entity", "-e", help="Filter logs for specific entity pattern"
     ),
     integration: str | None = typer.Option(
-        None, "--integration", "-i", help="Filter errors by integration/component"
+        None, "--integration", "-i", help="Filter logs by integration/component"
     ),
     correlation: bool = typer.Option(
         False, "--correlation", help="Include entity state correlation analysis"
@@ -54,40 +71,48 @@ def errors_command(
     ),
 ) -> None:
     """
-    Analyze Home Assistant runtime errors.
+    Analyze Home Assistant logs.
 
-    Provides comprehensive error analysis with correlation to entity state changes.
+    Provides comprehensive log analysis with correlation to entity state changes.
     Uses multiple data sources: API, log files, and database for correlation.
 
     Examples:
-        ha-tools errors --current
-        ha-tools errors --log 24h --entity "heizung"
-        ha-tools errors --integration "knx" --correlation
+        ha-tools logs --current
+        ha-tools logs --log 24h --entity "heizung"
+        ha-tools logs --integration "knx" --correlation
     """
     try:
+        levels = _parse_level_options(level)
         exit_code = asyncio.run(
-            _run_errors_command(
-                current, log, entity, integration, correlation, format or "markdown"
+            _run_logs_command(
+                current,
+                log,
+                levels,
+                entity,
+                integration,
+                correlation,
+                format or "markdown",
             )
         )
         sys.exit(exit_code)
     except KeyboardInterrupt:
-        print_error("Error analysis cancelled")
+        print_error("Log analysis cancelled")
         sys.exit(1)
     except Exception as e:
-        print_error(f"Error analysis failed: {e}")
+        print_error(f"Log analysis failed: {e}")
         sys.exit(1)
 
 
-async def _run_errors_command(
+async def _run_logs_command(
     current: bool,
     log: str | None,
+    levels: set[str],
     entity: str | None,
     integration: str | None,
     correlation: bool,
     format: str,
 ) -> int:
-    """Run the errors analysis command."""
+    """Run the logs analysis command."""
     try:
         config = HaToolsConfig.load()
     except Exception as e:
@@ -99,7 +124,7 @@ async def _run_errors_command(
     if log:
         log_timeframe = parse_timeframe(log)
 
-    print_info("Analyzing errors...")
+    print_info("Analyzing logs...")
 
     # Initialize database manager - may fail gracefully
     db_manager = DatabaseManager(config.database)
@@ -120,8 +145,8 @@ async def _run_errors_command(
             if correlation and db.is_connected():
                 await registry.load_all_registries(api)
 
-            # Collect errors from different sources
-            print_verbose("Collecting errors from sources...")
+            # Collect logs from different sources
+            print_verbose("Collecting logs from sources...")
             start = time.time()
             errors_data = await _collect_errors(
                 api,
@@ -129,11 +154,12 @@ async def _run_errors_command(
                 registry,
                 current,
                 log_timeframe,
+                levels,
                 entity,
                 integration,
                 correlation,
             )
-            print_verbose_timing("Error collection", (time.time() - start) * 1000)
+            print_verbose_timing("Log collection", (time.time() - start) * 1000)
 
             # Output results
             await _output_errors(errors_data, format, correlation)
@@ -147,6 +173,7 @@ async def _collect_errors(
     registry: RegistryManager,
     current: bool,
     log_timeframe: datetime | None,
+    levels: set[str],
     entity: str | None,
     integration: str | None,
     correlation: bool,
@@ -160,31 +187,35 @@ async def _collect_errors(
         "correlations": [],
     }
 
-    # Get current runtime errors from API
+    # Get current runtime logs from API
     if current:
         try:
-            api_errors = await api.get_errors()
-            errors_data["api_errors"] = _filter_errors(api_errors, entity, integration)
+            api_logs = await api.get_logs(levels)
+            errors_data["api_errors"] = _filter_errors(api_logs, entity, integration)
         except Exception as e:
-            print_warning(f"Could not fetch API errors: {e}")
+            print_warning(f"Could not fetch API logs: {e}")
 
-        # If API returned no errors, fall back to reading log file for recent errors
+        # If API returned no logs, fall back to reading log file for recent logs
         if not errors_data["api_errors"]:
-            print_verbose("API returned no errors, checking log file...")
-            # Look at last 1 hour for "current" errors
+            print_verbose("API returned no logs, checking log file...")
+            # Look at last 1 hour for "current" logs
             recent_timeframe = datetime.now() - timedelta(hours=1)
-            log_errors = await _analyze_log_files(
-                registry.config.ha_config_path, recent_timeframe, entity, integration
+            log_entries = await _analyze_log_files(
+                registry.config.ha_config_path,
+                recent_timeframe,
+                levels,
+                entity,
+                integration,
             )
-            # Put these in api_errors since they're "current" errors
-            errors_data["api_errors"] = log_errors
+            # Put these in api_errors since they're "current" logs
+            errors_data["api_errors"] = log_entries
 
-    # Get historical errors from log files
+    # Get historical logs from log files
     if log_timeframe:
-        log_errors = await _analyze_log_files(
-            registry.config.ha_config_path, log_timeframe, entity, integration
+        log_entries = await _analyze_log_files(
+            registry.config.ha_config_path, log_timeframe, levels, entity, integration
         )
-        errors_data["log_errors"] = log_errors
+        errors_data["log_errors"] = log_entries
 
     # Perform correlation analysis if requested
     if correlation and (errors_data["api_errors"] or errors_data["log_errors"]):
@@ -226,10 +257,14 @@ def _filter_errors(
 
 
 async def _analyze_log_files(
-    ha_config_path: str, since: datetime, entity: str | None, integration: str | None
+    ha_config_path: str,
+    since: datetime,
+    levels: set[str],
+    entity: str | None,
+    integration: str | None,
 ) -> list[dict[str, Any]]:
-    """Analyze Home Assistant log files for errors."""
-    log_errors = []
+    """Analyze Home Assistant log files for log entries."""
+    log_entries = []
 
     # Common log file locations
     log_paths = [
@@ -255,23 +290,29 @@ async def _analyze_log_files(
 
         try:
             print_verbose(f"Analyzing log file: {log_path}")
-            file_errors = await _parse_log_file(log_path, since, entity, integration)
-            log_errors.extend(file_errors)
-            print_verbose(f"Found {len(file_errors)} errors in {log_path}")
+            file_entries = await _parse_log_file(
+                log_path, since, levels, entity, integration
+            )
+            log_entries.extend(file_entries)
+            print_verbose(f"Found {len(file_entries)} log entries in {log_path}")
         except Exception as e:
             print_warning(f"Could not parse log file {log_path}: {e}")
 
     # Sort by timestamp
-    log_errors.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    log_entries.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
 
-    return log_errors
+    return log_entries
 
 
 async def _parse_log_file(
-    log_path: Path, since: datetime, entity: str | None, integration: str | None
+    log_path: Path,
+    since: datetime,
+    levels: set[str],
+    entity: str | None,
+    integration: str | None,
 ) -> list[dict[str, Any]]:
-    """Parse a single log file for errors."""
-    errors: list[dict[str, Any]] = []
+    """Parse a single log file for log entries matching requested levels."""
+    entries: list[dict[str, Any]] = []
 
     try:
         with open(log_path, encoding="utf-8", errors="replace") as f:
@@ -279,14 +320,16 @@ async def _parse_log_file(
     except Exception:
         return []
 
-    current_error: dict[str, Any] | None = None
-    error_patterns = [
-        r"ERROR",
-        r"Exception",
-        r"Failed",
-        r"Error in",
-        r"Traceback",
-    ]
+    # Build regex pattern for requested levels
+    upper_levels = {lvl.upper() for lvl in levels}
+    level_pattern = "|".join(upper_levels)
+
+    # Additional patterns for error-like entries (only when "error" level is requested)
+    extra_patterns: list[str] = []
+    if "error" in levels:
+        extra_patterns = ["Exception", "Failed", "Error in", "Traceback"]
+
+    current_entry: dict[str, Any] | None = None
 
     for line in lines:
         line = line.strip()
@@ -307,38 +350,43 @@ async def _parse_log_file(
         if timestamp and timestamp < since:
             continue
 
-        # Check if this line contains an error
-        is_error_line = any(pattern in line for pattern in error_patterns)
+        # Check if this line matches a requested level
+        level_match = (
+            re.search(rf"\b({level_pattern})\b", line) if level_pattern else None
+        )
+        is_extra_pattern = any(pattern in line for pattern in extra_patterns)
 
-        if is_error_line:
-            # Start a new error entry
-            if current_error:
-                errors.append(current_error)
+        if level_match or is_extra_pattern:
+            # Start a new entry
+            if current_entry:
+                entries.append(current_entry)
 
-            current_error = {
+            matched_level = level_match.group(1) if level_match else "ERROR"
+            current_entry = {
                 "timestamp": timestamp or datetime.now(),
+                "level": matched_level,
                 "message": line,
                 "source": str(log_path),
                 "context": [],
             }
-        elif current_error:
-            # Continue current error context
-            current_error["context"].append(line)
+        elif current_entry:
+            # Continue current entry context
+            current_entry["context"].append(line)
 
-            # End error if we hit a new log entry with timestamp
-            if timestamp and not any(pattern in line for pattern in error_patterns):
-                errors.append(current_error)
-                current_error = None
+            # End entry if we hit a new log line with timestamp
+            if timestamp and not level_match and not is_extra_pattern:
+                entries.append(current_entry)
+                current_entry = None
 
-    # Add the last error if we're still in one
-    if current_error:
-        errors.append(current_error)
+    # Add the last entry if we're still in one
+    if current_entry:
+        entries.append(current_entry)
 
     # Apply filters
     if entity or integration:
-        errors = _filter_errors(errors, entity, integration)
+        entries = _filter_errors(entries, entity, integration)
 
-    return errors
+    return entries
 
 
 async def _perform_correlation_analysis(
