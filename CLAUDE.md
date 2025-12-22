@@ -12,7 +12,7 @@ This is the `ha-tools` Python CLI - a lightweight, high-performance tool designe
 
 - `ha-tools validate [--syntax-only]` - Configuration validation
 - `ha-tools entities [--search <pattern>] [--include <type>] [--history <timeframe>] [--verbose]` - Entity discovery and analysis
-- `ha-tools errors [--current] [--log <timeframe>] [--entity <pattern>]` - Runtime error diagnostics
+- `ha-tools logs [--current] [--log <timeframe>] [--level <levels>] [--entity <pattern>]` - Log analysis
 
 **Performance Strategy**:
 
@@ -52,9 +52,11 @@ uv run ha-tools history switch.light --stats                   # State change co
 uv run ha-tools history sensor.temperature --format json       # JSON output
 uv run ha-tools history sensor.temperature --format csv -l -1  # Full CSV export
 
-# Error diagnostics
-uv run ha-tools errors --current                              # Current runtime errors
-uv run ha-tools errors --log 24h --entity "heizung"           # Entity-specific errors (substring match)
+# Log analysis
+uv run ha-tools logs --current                                # Current runtime logs (errors + warnings)
+uv run ha-tools logs --level error --current                  # Errors only
+uv run ha-tools logs --log 24h --entity "heizung"             # Entity-specific logs
+uv run ha-tools logs --level warning,critical --log 1h        # Warnings and critical only
 ```
 
 ## Implementation Structure
@@ -67,7 +69,7 @@ ha_tools/
 │   ├── __init__.py
 │   ├── validate.py     # Configuration validation logic
 │   ├── entities.py     # Entity discovery and analysis
-│   └── errors.py       # Error diagnostics
+│   └── logs.py         # Log analysis
 ├── lib/
 │   ├── __init__.py
 │   ├── database.py     # Async database connection and queries
@@ -134,7 +136,7 @@ uv run ha-tools entities --search "modified_area" --include state
 uv run ha-tools validate
 
 # 4. Check for runtime issues
-uv run ha-tools errors --current
+uv run ha-tools logs --current
 ```
 
 ### Debugging Existing Issues
@@ -143,8 +145,8 @@ uv run ha-tools errors --current
 # Analyze entity behavior (use --verbose for timing details)
 uv run ha-tools entities --search "heizung" --include history --history 24h --verbose
 
-# Correlate with errors
-uv run ha-tools errors --log 24h --entity "heizung"
+# Correlate with logs
+uv run ha-tools logs --log 24h --entity "heizung"
 
 # Check automation dependencies
 uv run ha-tools entities --include relations --search "automation.heating"

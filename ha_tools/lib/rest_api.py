@@ -122,17 +122,24 @@ class HomeAssistantAPI:
                 raise RuntimeError(f"Failed to validate config: HTTP {response.status}")
             return await response.json()
 
-    async def get_errors(self) -> list[dict[str, Any]]:
+    async def get_logs(self, levels: set[str] | None = None) -> list[dict[str, Any]]:
         """
-        Get current Home Assistant errors from the error log.
+        Get Home Assistant logs from the error log.
+
+        Args:
+            levels: Set of log levels to include (error, warning, critical, info, debug).
+                    Defaults to {"error", "warning"} if None.
 
         Tries multiple endpoints:
         1. /api/error_log (standard HA installations)
         2. /api/hassio/core/logs (HA OS/Supervised installations)
 
         Returns:
-            List of error dictionaries with keys: timestamp, level, source, message, context
+            List of log dictionaries with keys: timestamp, level, source, message, context
         """
+        if levels is None:
+            levels = {"error", "warning"}
+
         session = await self._get_session()
 
         # Try standard error_log endpoint first
@@ -140,9 +147,9 @@ class HomeAssistantAPI:
             async with session.get(f"{self._base_url}/api/error_log") as response:
                 if response.status == 200:
                     log_text = await response.text()
-                    errors = self._parse_error_log(log_text)
-                    if errors:
-                        return errors
+                    logs = self._parse_error_log(log_text, levels)
+                    if logs:
+                        return logs
         except Exception:
             pass
 
@@ -155,9 +162,9 @@ class HomeAssistantAPI:
                     log_text = await response.text()
                     # Strip ANSI color codes from Supervisor logs
                     log_text = self._strip_ansi_codes(log_text)
-                    return self._parse_error_log(log_text)
+                    return self._parse_error_log(log_text, levels)
         except Exception as e:
-            print_warning(f"Could not fetch error log: {e}")
+            print_warning(f"Could not fetch logs: {e}")
 
         return []
 
@@ -168,13 +175,13 @@ class HomeAssistantAPI:
         ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
         return ansi_pattern.sub("", text)
 
-    def _parse_error_log(self, log_text: str) -> list[dict[str, Any]]:
-        """Parse error log text into structured error records."""
+    def _parse_error_log(self, log_text: str, levels: set[str]) -> list[dict[str, Any]]:
+        """Parse error log text into structured log records."""
         import re
         from datetime import datetime
 
-        errors: list[dict[str, Any]] = []
-        current_error: dict[str, Any] | None = None
+        logs: list[dict[str, Any]] = []
+        current_log: dict[str, Any] | None = None
 
         for line in log_text.splitlines():
             if not line.strip():
@@ -183,7 +190,7 @@ class HomeAssistantAPI:
             # Match log line format: "2024-01-15 10:30:45.123 ERROR (MainThread) [component] Message"
             match = re.match(
                 r"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s+"
-                r"(ERROR|WARNING|CRITICAL)\s+"
+                r"(ERROR|WARNING|CRITICAL|INFO|DEBUG)\s+"
                 r"\(([^)]+)\)\s+"
                 r"\[([^\]]+)\]\s*"
                 r"(.*)",
@@ -191,9 +198,9 @@ class HomeAssistantAPI:
             )
 
             if match:
-                # Save previous error if exists
-                if current_error:
-                    errors.append(current_error)
+                # Save previous log if exists
+                if current_log:
+                    logs.append(current_log)
 
                 timestamp_str, level, thread, source, message = match.groups()
                 try:
@@ -201,25 +208,26 @@ class HomeAssistantAPI:
                 except ValueError:
                     timestamp = datetime.now()
 
-                current_error = {
+                current_log = {
                     "timestamp": timestamp,
                     "level": level,
                     "source": source,
                     "message": message,
                     "context": [],
                 }
-            elif current_error:
+            elif current_log:
                 # Continuation line (traceback, etc.)
-                current_error["context"].append(line)
+                current_log["context"].append(line)
 
-        # Add final error
-        if current_error:
-            errors.append(current_error)
+        # Add final log
+        if current_log:
+            logs.append(current_log)
 
-        # Filter to only ERROR and CRITICAL (not WARNING) and limit to recent
-        errors = [e for e in errors if e["level"] in ("ERROR", "CRITICAL")]
+        # Filter by requested levels (convert to uppercase for comparison)
+        upper_levels = {lvl.upper() for lvl in levels}
+        logs = [log for log in logs if log["level"] in upper_levels]
 
-        return errors[-50:]  # Return most recent 50 errors
+        return logs[-50:]  # Return most recent 50 entries
 
     async def get_services(self) -> dict[str, Any]:
         """Get all available services."""
@@ -299,22 +307,6 @@ class HomeAssistantAPI:
         except Exception as e:
             print_warning(f"Could not fetch integration info: {e}")
         return {}
-
-    async def get_logs(self, timeframe: str | None = None) -> str:
-        """Get Home Assistant logs."""
-        try:
-            session = await self._get_session()
-            url = f"{self._base_url}/api/error_log"
-            if timeframe:
-                # Note: This might not be supported in all HA versions
-                url += f"?timeframe={timeframe}"
-
-            async with session.get(url) as response:
-                if response.status == 200:
-                    return await response.text()
-        except Exception as e:
-            print_warning(f"Could not fetch logs via API: {e}")
-        return ""
 
     async def get_statistics(
         self,
