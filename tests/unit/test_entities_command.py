@@ -32,6 +32,11 @@ class TestEntitiesCommand:
         options = _parse_include_options("state,metadata")
         assert options == {"state", "metadata"}
 
+    def test_parse_include_options_with_attributes(self):
+        """Test parsing include options with attributes."""
+        options = _parse_include_options("state,attributes")
+        assert options == {"state", "attributes"}
+
     def test_parse_include_options_empty(self):
         """Test parsing empty include options."""
         options = _parse_include_options("")
@@ -241,6 +246,45 @@ class TestEntitiesCommand:
 
         assert len(entities) == 1
         assert entities[0]["full_metadata"] == full_metadata
+
+    @pytest.mark.asyncio
+    async def test_get_entities_attributes_auto_includes_state(self):
+        """Test that --include attributes automatically fetches state."""
+        mock_registry = AsyncMock()
+        mock_db = AsyncMock()
+        mock_api = AsyncMock()
+
+        mock_registry._entity_registry = [
+            {"entity_id": "sensor.temperature", "friendly_name": "Temperature"}
+        ]
+
+        mock_api.get_entity_state.return_value = {
+            "entity_id": "sensor.temperature",
+            "state": "20.5",
+            "attributes": {"unit_of_measurement": "°C", "device_class": "temperature"},
+            "last_changed": "2024-01-01T12:00:00+00:00",
+            "last_updated": "2024-01-01T12:00:00+00:00",
+        }
+
+        # Only request attributes - should auto-include state
+        include_options = {
+            "attributes",
+            "state",
+        }  # state auto-added by _run_entities_command
+
+        entities = await _get_entities(
+            mock_registry,
+            mock_db,
+            mock_api,
+            search=None,
+            include_options=include_options,
+            history_timeframe=None,
+            limit=None,
+        )
+
+        assert len(entities) == 1
+        assert entities[0]["attributes"]["unit_of_measurement"] == "°C"
+        mock_api.get_entity_state.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_entities_with_limit(self):
@@ -494,6 +538,41 @@ class TestEntitiesCommand:
             assert "Current State" in call_args
             assert "History Count" in call_args
             assert "Detailed Information" in call_args
+
+    def test_output_markdown_format_with_attributes(self):
+        """Test markdown format with attributes display."""
+        entities_data = [
+            {
+                "entity_id": "calendar.urlaube",
+                "friendly_name": "Urlaube",
+                "domain": "calendar",
+                "device_class": None,
+                "unit_of_measurement": None,
+                "current_state": "on",
+                "last_changed": "2024-01-01T12:00:00+00:00",
+                "attributes": {
+                    "friendly_name": "Urlaube",
+                    "supported_features": 7,
+                    "message": "Tim weg",
+                    "all_day": False,
+                    "start_time": "2025-12-23 10:00:00",
+                    "end_time": "2025-12-29 16:00:00",
+                    "location": "",
+                    "description": None,
+                },
+            }
+        ]
+
+        with patch("builtins.print") as mock_print:
+            _output_markdown_format(entities_data, {"state", "attributes"})
+
+            mock_print.assert_called_once()
+            call_args = mock_print.call_args[0][0]
+            assert "**Attributes:**" in call_args
+            assert "- friendly_name: Urlaube" in call_args
+            assert "- message: Tim weg" in call_args
+            assert "- location: (empty)" in call_args
+            assert "- description: (empty)" in call_args
 
 
 class TestMultiPatternSearch:
