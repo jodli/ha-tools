@@ -40,7 +40,7 @@ def entities_command(
         None,
         "--include",
         "-i",
-        help="Include additional data (state, history, relations)",
+        help="Include additional data (state, history, relations, attributes)",
     ),
     history: str | None = typer.Option(
         None,
@@ -104,6 +104,10 @@ async def _run_entities_command(
         # Auto-include history when --history is specified
         include_options = include_options | {"history"}
 
+    # Auto-include state when --include attributes (attributes come from state API)
+    if "attributes" in include_options:
+        include_options = include_options | {"state"}
+
     print_info("Discovering entities...")
 
     async with DatabaseManager(config.database) as db:
@@ -136,7 +140,7 @@ def _parse_include_options(include: str | None) -> set[str]:
         return set()
 
     options = {opt.strip().lower() for opt in include.split(",")}
-    valid_options = {"state", "history", "relations", "metadata"}
+    valid_options = {"state", "history", "relations", "metadata", "attributes"}
 
     # Filter for valid options
     return {opt for opt in options if opt in valid_options}
@@ -361,7 +365,8 @@ def _output_markdown_format(
         f"Found **{len(entities_data)}** entities"
         f"{' with history data' if 'history' in include_options else ''}"
         f"{' with current state' if 'state' in include_options else ''}"
-        f"{' with relations' if 'relations' in include_options else ''}",
+        f"{' with relations' if 'relations' in include_options else ''}"
+        f"{' with attributes' if 'attributes' in include_options else ''}",
     )
 
     # Entity table
@@ -410,6 +415,27 @@ def _output_markdown_format(
                     details.append(
                         f"**Last Changed:** {format_timestamp(entity['last_changed'])}"
                     )
+
+            # Attributes information
+            if "attributes" in include_options and entity.get("attributes"):
+                attrs = entity["attributes"]
+                if attrs:
+                    details.append("\n**Attributes:**")
+                    for key, value in sorted(attrs.items()):
+                        # Format value - handle empty/None values nicely
+                        if value is None or value == "":
+                            formatted_value = "(empty)"
+                        elif isinstance(value, list):
+                            formatted_value = (
+                                ", ".join(str(v) for v in value)
+                                if value
+                                else "(empty list)"
+                            )
+                        elif isinstance(value, dict):
+                            formatted_value = str(value) if value else "(empty)"
+                        else:
+                            formatted_value = str(value)
+                        details.append(f"- {key}: {formatted_value}")
 
             # History information
             if "history" in include_options and "history_count" in entity:
