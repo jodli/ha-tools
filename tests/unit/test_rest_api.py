@@ -4,6 +4,7 @@ Unit tests for ha-tools REST API client.
 Tests Home Assistant API authentication, connection handling, and data retrieval.
 """
 
+import json
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -825,3 +826,270 @@ Additional context line"""
             logs = await api.get_logs({"error", "warning"})
 
             assert logs == []
+
+
+class TestHomeAssistantAPIWebSocket:
+    """Tests for HomeAssistantAPI WebSocket methods."""
+
+    @pytest.fixture
+    def mock_config(self):
+        """Create mock Home Assistant config."""
+        config = MagicMock()
+        config.url = "http://homeassistant.local:8123"
+        config.access_token = "test_token"
+        config.timeout = 30
+        return config
+
+    @pytest.fixture
+    def api_client(self, mock_config):
+        """Create API client instance."""
+        return HomeAssistantAPI(mock_config)
+
+    @pytest.fixture
+    def mock_ws_response(self, api_client):
+        """
+        Factory fixture to set up mock WebSocket with a given response.
+
+        Usage:
+            mock_ws_response({"id": 1, "success": True, "result": [...]})
+        """
+
+        def _setup(response_data: dict):
+            api_client._ws = AsyncMock()
+            api_client._ws.closed = False
+            api_client._ws.send_json = AsyncMock()
+
+            mock_msg = MagicMock()
+            mock_msg.type = 1  # WSMsgType.TEXT
+            mock_msg.data = json.dumps(response_data)
+            api_client._ws.receive = AsyncMock(return_value=mock_msg)
+            return api_client
+
+        return _setup
+
+    def test_websocket_url_http(self, api_client):
+        """Test WebSocket URL construction from HTTP."""
+        assert api_client._ws_url == "ws://homeassistant.local:8123/api/websocket"
+
+    def test_websocket_url_https(self, mock_config):
+        """Test WebSocket URL construction from HTTPS."""
+        mock_config.url = "https://homeassistant.local:8123"
+        api = HomeAssistantAPI(mock_config)
+        assert api._ws_url == "wss://homeassistant.local:8123/api/websocket"
+
+    @pytest.mark.asyncio
+    async def test_get_system_logs_ws_success(self, api_client, mock_ws_response):
+        """Test successful system log retrieval via WebSocket."""
+        mock_ws_response(
+            {
+                "id": 1,
+                "type": "result",
+                "success": True,
+                "result": [
+                    {
+                        "name": "homeassistant.components.sensor.helpers",
+                        "message": ["sensor.test rendered invalid timestamp"],
+                        "level": "ERROR",
+                        "source": ["components/sensor/helpers.py", 23],
+                        "timestamp": 1736715000.123,
+                        "exception": "",
+                        "count": 7,
+                        "first_occurred": 1736712600.456,
+                    }
+                ],
+            }
+        )
+
+        logs = await api_client.get_system_logs_ws({"error"})
+
+        assert len(logs) == 1
+        assert logs[0]["source"] == "homeassistant.components.sensor.helpers"
+        assert logs[0]["source_location"] == "components/sensor/helpers.py:23"
+        assert logs[0]["count"] == 7
+        assert logs[0]["level"] == "ERROR"
+
+    @pytest.mark.asyncio
+    async def test_get_system_logs_ws_level_filter(self, api_client, mock_ws_response):
+        """Test that logs are filtered by level."""
+        mock_ws_response(
+            {
+                "id": 1,
+                "type": "result",
+                "success": True,
+                "result": [
+                    {
+                        "name": "test",
+                        "message": ["error"],
+                        "level": "ERROR",
+                        "source": ["a.py", 1],
+                        "timestamp": 1,
+                        "exception": "",
+                        "count": 1,
+                        "first_occurred": 1,
+                    },
+                    {
+                        "name": "test",
+                        "message": ["warning"],
+                        "level": "WARNING",
+                        "source": ["b.py", 2],
+                        "timestamp": 2,
+                        "exception": "",
+                        "count": 1,
+                        "first_occurred": 2,
+                    },
+                    {
+                        "name": "test",
+                        "message": ["info"],
+                        "level": "INFO",
+                        "source": ["c.py", 3],
+                        "timestamp": 3,
+                        "exception": "",
+                        "count": 1,
+                        "first_occurred": 3,
+                    },
+                ],
+            }
+        )
+
+        logs = await api_client.get_system_logs_ws({"error"})
+        assert len(logs) == 1
+        assert logs[0]["level"] == "ERROR"
+
+    @pytest.mark.asyncio
+    async def test_get_system_logs_ws_empty_response(
+        self, api_client, mock_ws_response
+    ):
+        """Test handling empty response."""
+        mock_ws_response({"id": 1, "type": "result", "success": True, "result": []})
+
+        logs = await api_client.get_system_logs_ws()
+        assert logs == []
+
+    @pytest.mark.asyncio
+    async def test_get_system_logs_ws_connection_failure(self, api_client):
+        """Test graceful handling when WebSocket connection fails."""
+        # No WebSocket connected
+        api_client._ws = None
+        # Mock _ws_connect to fail
+        api_client._ws_connect = AsyncMock(return_value=False)
+
+        logs = await api_client.get_system_logs_ws()
+        assert logs == []
+
+    @pytest.mark.asyncio
+    async def test_ws_connect_auth_invalid(self, api_client):
+        """Test handling of auth_invalid response."""
+        # Mock WebSocket that returns auth_required then auth_invalid
+        mock_ws = AsyncMock()
+        mock_ws.closed = False
+
+        auth_required_msg = MagicMock()
+        auth_required_msg.type = 1  # WSMsgType.TEXT
+        auth_required_msg.data = json.dumps(
+            {"type": "auth_required", "ha_version": "2024.1.0"}
+        )
+
+        auth_invalid_msg = MagicMock()
+        auth_invalid_msg.type = 1  # WSMsgType.TEXT
+        auth_invalid_msg.data = json.dumps(
+            {"type": "auth_invalid", "message": "Invalid access token"}
+        )
+
+        mock_ws.receive = AsyncMock(side_effect=[auth_required_msg, auth_invalid_msg])
+        mock_ws.send_json = AsyncMock()
+
+        # Mock session to return our mock WebSocket
+        mock_session = AsyncMock()
+        mock_session.ws_connect = AsyncMock(return_value=mock_ws)
+        api_client._session = mock_session
+
+        result = await api_client._ws_connect()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_get_system_logs_ws_with_exception(
+        self, api_client, mock_ws_response
+    ):
+        """Test parsing logs that include exception tracebacks."""
+        mock_ws_response(
+            {
+                "id": 1,
+                "type": "result",
+                "success": True,
+                "result": [
+                    {
+                        "name": "homeassistant.core",
+                        "message": ["Uncaught exception in main loop"],
+                        "level": "ERROR",
+                        "source": ["homeassistant/core.py", 145],
+                        "timestamp": 1736715000.0,
+                        "exception": 'Traceback (most recent call last):\n  File "core.py", line 145\nValueError: test',
+                        "count": 1,
+                        "first_occurred": 1736715000.0,
+                    }
+                ],
+            }
+        )
+
+        logs = await api_client.get_system_logs_ws({"error"})
+
+        assert len(logs) == 1
+        assert (
+            logs[0]["exception"]
+            == 'Traceback (most recent call last):\n  File "core.py", line 145\nValueError: test'
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_system_logs_ws_multiple_messages(
+        self, api_client, mock_ws_response
+    ):
+        """Test parsing logs with multiple message variations (up to 5 stored by HA)."""
+        mock_ws_response(
+            {
+                "id": 1,
+                "type": "result",
+                "success": True,
+                "result": [
+                    {
+                        "name": "homeassistant.components.sensor",
+                        "message": [
+                            "sensor.temp1 unavailable",
+                            "sensor.temp2 unavailable",
+                            "sensor.temp3 unavailable",
+                        ],
+                        "level": "WARNING",
+                        "source": ["components/sensor/__init__.py", 50],
+                        "timestamp": 1736715000.0,
+                        "exception": "",
+                        "count": 3,
+                        "first_occurred": 1736712000.0,
+                    }
+                ],
+            }
+        )
+
+        logs = await api_client.get_system_logs_ws({"warning"})
+
+        assert len(logs) == 1
+        # First message is the most recent
+        assert logs[0]["message"] == "sensor.temp1 unavailable"
+        # Additional messages stored as context
+        assert logs[0]["context"] == [
+            "sensor.temp2 unavailable",
+            "sensor.temp3 unavailable",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_get_system_logs_ws_command_error(self, api_client, mock_ws_response):
+        """Test graceful handling when command fails (e.g., non-admin token)."""
+        mock_ws_response(
+            {
+                "id": 1,
+                "type": "result",
+                "success": False,
+                "error": {"code": "unauthorized", "message": "Unauthorized"},
+            }
+        )
+
+        logs = await api_client.get_system_logs_ws({"error"})
+        assert logs == []
