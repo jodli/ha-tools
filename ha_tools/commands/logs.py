@@ -566,25 +566,22 @@ def _output_markdown_format(errors_data: dict[str, Any], correlation: bool) -> N
             context = error.get("context", [])
             context_str = "\n".join(context[:5]) if context else ""
 
-            # Occurrence info from WebSocket
-            count = error.get("count", 1)
-            first_occurred = error.get("first_occurred")
-
-            occurrence_info = ""
-            if count > 1:
-                occurrence_info = f"\n**Occurrences:** {count} times"
-                if first_occurred:
-                    occurrence_info += (
-                        f"\n**First occurred:** {format_timestamp(first_occurred)}"
-                    )
-
             # Build error content
             content_parts = [f"**Logger:** `{source}`"]
             if source_location:
                 content_parts.append(f"**Source:** `{source_location}`")
             content_parts.append(f"**Message:** {message}")
-            if occurrence_info:
-                content_parts.append(occurrence_info.lstrip("\n"))
+
+            # Add occurrence info from WebSocket (only shown when count > 1)
+            count = error.get("count", 1)
+            if count > 1:
+                content_parts.append(f"**Occurrences:** {count} times")
+                first_occurred = error.get("first_occurred")
+                if first_occurred:
+                    content_parts.append(
+                        f"**First occurred:** {format_timestamp(first_occurred)}"
+                    )
+
             if context_str:
                 content_parts.append(f"**Context:**\n```\n{context_str}\n```")
 

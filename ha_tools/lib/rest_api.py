@@ -359,23 +359,25 @@ class HomeAssistantAPI:
             timestamp = entry.get("timestamp", 0)
             first_occurred = entry.get("first_occurred", timestamp)
 
-            logs.append(
-                {
-                    "timestamp": datetime.fromtimestamp(timestamp)
-                    if timestamp
-                    else datetime.now(),
-                    "level": level,
-                    "source": entry.get("name", ""),
-                    "source_location": source_location,
-                    "message": message,
-                    "context": messages[1:] if len(messages) > 1 else [],
-                    "exception": entry.get("exception", ""),
-                    "count": entry.get("count", 1),
-                    "first_occurred": datetime.fromtimestamp(first_occurred)
-                    if first_occurred
-                    else None,
-                }
+            log_entry = {
+                "level": level,
+                "source": entry.get("name", ""),
+                "source_location": source_location,
+                "message": message,
+                "context": messages[1:] if len(messages) > 1 else [],
+                "exception": entry.get("exception", ""),
+                "count": entry.get("count", 1),
+            }
+
+            # Convert timestamps - use datetime.now() as fallback for missing values
+            log_entry["timestamp"] = (
+                datetime.fromtimestamp(timestamp) if timestamp else datetime.now()
             )
+            log_entry["first_occurred"] = (
+                datetime.fromtimestamp(first_occurred) if first_occurred else None
+            )
+
+            logs.append(log_entry)
 
         return logs
 
