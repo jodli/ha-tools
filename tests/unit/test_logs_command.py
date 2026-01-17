@@ -15,6 +15,7 @@ from ha_tools.commands.logs import (
     _extract_entity_references,
     _fetch_current_logs,
     _filter_errors,
+    _output_markdown_format,
     _parse_level_options,
     _run_logs_command,
 )
@@ -364,3 +365,73 @@ class TestCollectErrorsIntegration:
 
         assert len(result["api_errors"]) == 1
         assert result["api_errors"][0]["count"] == 3
+
+
+class TestOutputMarkdownFormatOccurrences:
+    """Tests for _output_markdown_format occurrence count display."""
+
+    @pytest.fixture
+    def base_errors_data(self):
+        """
+        Factory fixture for creating errors_data with customizable api_errors.
+
+        Usage:
+            base_errors_data([{"timestamp": ..., "level": "ERROR", ...}])
+        """
+
+        def _create(api_errors: list[dict]):
+            return {
+                "api_errors": api_errors,
+                "log_errors": [],
+                "correlations": [],
+            }
+
+        return _create
+
+    @pytest.fixture
+    def sample_error(self):
+        """Create a sample error dict with common fields."""
+        return {
+            "timestamp": datetime(2026, 1, 11, 23, 20, 0),
+            "level": "ERROR",
+            "source": "homeassistant.components.sensor.helpers",
+            "source_location": "components/sensor/helpers.py:23",
+            "message": "sensor.test rendered invalid timestamp",
+            "context": [],
+            "count": 1,
+        }
+
+    def test_output_shows_occurrence_count_when_greater_than_one(
+        self, base_errors_data, sample_error, capsys
+    ):
+        """Test that occurrence count is displayed when count > 1."""
+        sample_error["count"] = 7
+        sample_error["first_occurred"] = datetime(2026, 1, 11, 22, 50, 0)
+        errors_data = base_errors_data([sample_error])
+
+        _output_markdown_format(errors_data, correlation=False)
+        captured = capsys.readouterr()
+
+        assert "**Occurrences:** 7 times" in captured.out
+        assert "**First occurred:**" in captured.out
+
+    def test_output_shows_source_location(self, base_errors_data, sample_error, capsys):
+        """Test that source location (file:line) is displayed."""
+        errors_data = base_errors_data([sample_error])
+
+        _output_markdown_format(errors_data, correlation=False)
+        captured = capsys.readouterr()
+
+        assert "components/sensor/helpers.py:23" in captured.out
+
+    def test_output_hides_occurrence_when_count_is_one(
+        self, base_errors_data, sample_error, capsys
+    ):
+        """Test that occurrence info is hidden when count = 1."""
+        # sample_error already has count=1 by default
+        errors_data = base_errors_data([sample_error])
+
+        _output_markdown_format(errors_data, correlation=False)
+        captured = capsys.readouterr()
+
+        assert "Occurrences" not in captured.out

@@ -559,15 +559,38 @@ def _output_markdown_format(errors_data: dict[str, Any], correlation: bool) -> N
         for i, error in enumerate(errors_data["api_errors"][:10], 1):
             timestamp = format_timestamp(error.get("timestamp"))
             source = error.get("source", "Unknown")
+            source_location = error.get(
+                "source_location", ""
+            )  # File:line from WebSocket
             message = error.get("message", "No message")
             context = error.get("context", [])
             context_str = "\n".join(context[:5]) if context else ""
 
+            # Occurrence info from WebSocket
+            count = error.get("count", 1)
+            first_occurred = error.get("first_occurred")
+
+            occurrence_info = ""
+            if count > 1:
+                occurrence_info = f"\n**Occurrences:** {count} times"
+                if first_occurred:
+                    occurrence_info += (
+                        f"\n**First occurred:** {format_timestamp(first_occurred)}"
+                    )
+
+            # Build error content
+            content_parts = [f"**Logger:** `{source}`"]
+            if source_location:
+                content_parts.append(f"**Source:** `{source_location}`")
+            content_parts.append(f"**Message:** {message}")
+            if occurrence_info:
+                content_parts.append(occurrence_info.lstrip("\n"))
+            if context_str:
+                content_parts.append(f"**Context:**\n```\n{context_str}\n```")
+
             formatter.add_section(
                 f"Error {i} - {timestamp}",
-                f"**Source:** `{source}`\n"
-                f"**Message:** {message}\n"
-                + (f"**Context:**\n```\n{context_str}\n```" if context_str else ""),
+                "\n".join(content_parts),
             )
         if len(errors_data["api_errors"]) > 10:
             formatter.add_section(
