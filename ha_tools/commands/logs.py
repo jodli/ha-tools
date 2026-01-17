@@ -179,36 +179,17 @@ async def _collect_errors(
     correlation: bool,
 ) -> dict[str, Any]:
     """Collect errors from multiple sources."""
-    from datetime import timedelta
-
     errors_data: dict[str, list[dict[str, Any]]] = {
         "api_errors": [],
         "log_errors": [],
         "correlations": [],
     }
 
-    # Get current runtime logs from API
+    # Get current runtime logs - try sources in order of preference
     if current:
-        try:
-            api_logs = await api.get_logs(levels)
-            errors_data["api_errors"] = _filter_errors(api_logs, entity, integration)
-        except Exception as e:
-            print_warning(f"Could not fetch API logs: {e}")
-
-        # If API returned no logs, fall back to reading log file for recent logs
-        if not errors_data["api_errors"]:
-            print_verbose("API returned no logs, checking log file...")
-            # Look at last 1 hour for "current" logs
-            recent_timeframe = datetime.now() - timedelta(hours=1)
-            log_entries = await _analyze_log_files(
-                registry.config.ha_config_path,
-                recent_timeframe,
-                levels,
-                entity,
-                integration,
-            )
-            # Put these in api_errors since they're "current" logs
-            errors_data["api_errors"] = log_entries
+        errors_data["api_errors"] = await _fetch_current_logs(
+            api, entity, integration, levels, registry.config.ha_config_path
+        )
 
     # Get historical logs from log files
     if log_timeframe:
@@ -225,6 +206,41 @@ async def _collect_errors(
         errors_data["correlations"] = correlations
 
     return errors_data
+
+
+async def _fetch_current_logs(
+    api: HomeAssistantAPI,
+    entity: str | None,
+    integration: str | None,
+    levels: set[str],
+    ha_config_path: str,
+) -> list[dict[str, Any]]:
+    """Fetch current logs from WebSocket, REST API, or log files (in order of preference)."""
+    # Try WebSocket first (preferred - matches HA UI)
+    print_verbose("Attempting WebSocket for system logs...")
+    try:
+        ws_logs = await api.get_system_logs_ws(levels)
+        if ws_logs:
+            print_verbose(f"Got {len(ws_logs)} logs via WebSocket")
+            return _filter_errors(ws_logs, entity, integration)
+    except Exception as e:
+        print_verbose(f"WebSocket failed: {e}")
+
+    # Fall back to REST API
+    print_verbose("Trying REST API for logs...")
+    try:
+        api_logs = await api.get_logs(levels)
+        if api_logs:
+            return _filter_errors(api_logs, entity, integration)
+    except Exception as e:
+        print_warning(f"Could not fetch API logs: {e}")
+
+    # Final fallback: read log file for recent logs
+    print_verbose("API returned no logs, checking log file...")
+    recent_timeframe = datetime.now() - timedelta(hours=1)
+    return await _analyze_log_files(
+        ha_config_path, recent_timeframe, levels, entity, integration
+    )
 
 
 def _filter_errors(

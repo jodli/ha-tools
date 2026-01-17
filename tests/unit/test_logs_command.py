@@ -11,7 +11,9 @@ import pytest
 
 from ha_tools.commands.logs import (
     _calculate_correlation_strength,
+    _collect_errors,
     _extract_entity_references,
+    _fetch_current_logs,
     _filter_errors,
     _parse_level_options,
     _run_logs_command,
@@ -221,3 +223,144 @@ class TestParseLevelOptions:
         result = _parse_level_options("")
         # Empty string is falsy, so returns default {"error", "warning"}
         assert result == {"error", "warning"}
+
+
+class TestFetchCurrentLogs:
+    """Tests for _fetch_current_logs WebSocket/REST fallback behavior."""
+
+    @pytest.fixture
+    def mock_api(self):
+        """Create mock HomeAssistantAPI."""
+        return AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_prefers_websocket_over_rest(self, mock_api):
+        """Test that WebSocket is tried before REST API."""
+        ws_logs = [
+            {
+                "timestamp": datetime.now(),
+                "level": "ERROR",
+                "source": "test",
+                "message": "ws error",
+                "count": 3,
+            }
+        ]
+        mock_api.get_system_logs_ws = AsyncMock(return_value=ws_logs)
+
+        result = await _fetch_current_logs(
+            mock_api,
+            entity=None,
+            integration=None,
+            levels={"error"},
+            ha_config_path="/tmp",
+        )
+
+        assert len(result) == 1
+        assert result[0]["count"] == 3
+        mock_api.get_logs.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_rest_when_websocket_empty(self, mock_api):
+        """Test fallback to REST API when WebSocket returns empty."""
+        mock_api.get_system_logs_ws = AsyncMock(return_value=[])
+        rest_logs = [
+            {
+                "timestamp": datetime.now(),
+                "level": "ERROR",
+                "source": "test",
+                "message": "rest error",
+            }
+        ]
+        mock_api.get_logs = AsyncMock(return_value=rest_logs)
+
+        result = await _fetch_current_logs(
+            mock_api,
+            entity=None,
+            integration=None,
+            levels={"error"},
+            ha_config_path="/tmp",
+        )
+
+        assert len(result) == 1
+        mock_api.get_logs.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_rest_on_websocket_exception(self, mock_api):
+        """Test fallback to REST API when WebSocket raises exception."""
+        mock_api.get_system_logs_ws = AsyncMock(
+            side_effect=Exception("Connection failed")
+        )
+        rest_logs = [
+            {
+                "timestamp": datetime.now(),
+                "level": "ERROR",
+                "source": "test",
+                "message": "rest error",
+            }
+        ]
+        mock_api.get_logs = AsyncMock(return_value=rest_logs)
+
+        result = await _fetch_current_logs(
+            mock_api,
+            entity=None,
+            integration=None,
+            levels={"error"},
+            ha_config_path="/tmp",
+        )
+
+        assert len(result) == 1
+        mock_api.get_logs.assert_called_once()
+
+
+class TestCollectErrorsIntegration:
+    """Integration tests for _collect_errors orchestration."""
+
+    @pytest.fixture
+    def mock_api(self):
+        """Create mock HomeAssistantAPI."""
+        return AsyncMock()
+
+    @pytest.fixture
+    def mock_db(self):
+        """Create mock database (disconnected)."""
+        db = MagicMock()
+        db.is_connected = MagicMock(return_value=False)
+        return db
+
+    @pytest.fixture
+    def mock_registry(self):
+        """Create mock registry with config."""
+        registry = MagicMock()
+        registry.config.ha_config_path = "/tmp"
+        return registry
+
+    @pytest.mark.asyncio
+    async def test_collect_errors_with_current_flag(
+        self, mock_api, mock_db, mock_registry
+    ):
+        """Test _collect_errors populates api_errors when current=True."""
+        ws_logs = [
+            {
+                "timestamp": datetime.now(),
+                "level": "ERROR",
+                "source": "test",
+                "message": "ws error",
+                "count": 3,
+            }
+        ]
+        mock_api.get_system_logs_ws = AsyncMock(return_value=ws_logs)
+
+        result = await _collect_errors(
+            mock_api,
+            mock_db,
+            mock_registry,
+            current=True,
+            log_timeframe=None,
+            levels={"error"},
+            entity=None,
+            integration=None,
+            correlation=False,
+        )
+
+        assert len(result["api_errors"]) == 1
+        assert result["api_errors"][0]["count"] == 3
