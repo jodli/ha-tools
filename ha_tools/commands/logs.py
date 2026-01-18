@@ -124,7 +124,7 @@ async def _run_logs_command(
     if log:
         log_timeframe = parse_timeframe(log)
 
-    print_info("Analyzing logs...")
+    print_verbose("Analyzing logs...")
 
     # Initialize database manager - may fail gracefully
     db_manager = DatabaseManager(config.database)
@@ -414,7 +414,7 @@ async def _perform_correlation_analysis(
     if not errors:
         return correlations
 
-    print_info("Performing correlation analysis...")
+    print_verbose("Performing correlation analysis...")
 
     for error in errors[:20]:  # Limit to avoid too many DB queries
         error_time = error.get("timestamp")

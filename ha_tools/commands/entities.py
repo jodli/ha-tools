@@ -20,7 +20,6 @@ from ..lib.output import (
     format_timestamp,
     is_verbose,
     print_error,
-    print_info,
     print_verbose,
     print_verbose_timing,
 )
@@ -108,8 +107,6 @@ async def _run_entities_command(
     if "attributes" in include_options:
         include_options = include_options | {"state"}
 
-    print_info("Discovering entities...")
-
     async with DatabaseManager(config.database) as db:
         async with HomeAssistantAPI(config.home_assistant) as api:
             registry = RegistryManager(config)
@@ -170,7 +167,7 @@ async def _get_entities(
     if limit:
         registry_entities = registry_entities[:limit]
 
-    print_info(f"Processing {len(registry_entities)} entities...")
+    print_verbose(f"Processing {len(registry_entities)} entities...")
 
     # Build basic entity data first
     for entity in registry_entities:

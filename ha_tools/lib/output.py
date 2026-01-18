@@ -10,7 +10,7 @@ from typing import Any
 
 from rich.console import Console
 
-console = Console()
+console = Console(stderr=True)
 
 # Verbose output state
 _verbose_enabled = False
@@ -41,22 +41,22 @@ def print_verbose_timing(operation: str, duration_ms: float) -> None:
 
 def print_success(message: str) -> None:
     """Print a success message."""
-    console.print(f"[green]✓ {message}[/green]")
+    console.print(f"[green]{message}[/green]")
 
 
 def print_error(message: str) -> None:
     """Print an error message."""
-    console.print(f"[red]✗ {message}[/red]")
+    console.print(f"[red]{message}[/red]")
 
 
 def print_warning(message: str) -> None:
     """Print a warning message."""
-    console.print(f"[yellow]⚠ {message}[/yellow]")
+    console.print(f"[yellow]{message}[/yellow]")
 
 
 def print_info(message: str) -> None:
     """Print an info message."""
-    console.print(f"[blue]ℹ {message}[/blue]")
+    console.print(f"[blue]{message}[/blue]")
 
 
 class MarkdownFormatter:

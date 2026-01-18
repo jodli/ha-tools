@@ -219,7 +219,7 @@ class TestCLIIntegration:
 
             result = self.runner.invoke(app, ["test-connection"])
             assert result.exit_code == 0
-            assert "All connections test successful!" in result.stdout
+            assert "All connections test successful!" in result.output
 
     def test_test_connection_command_failure(self, sample_config_file: Path):
         """Test test-connection command with connection failures."""
@@ -238,7 +238,7 @@ class TestCLIIntegration:
 
             result = self.runner.invoke(app, ["test-connection"])
             assert result.exit_code == 1
-            assert "Connection test failed" in result.stdout
+            assert "Connection test failed" in result.output
 
     @pytest.mark.asyncio
     async def test_error_handling_integration(self, sample_config_file: Path):

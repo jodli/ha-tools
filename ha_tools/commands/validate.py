@@ -19,7 +19,6 @@ from ..lib.output import (
     MarkdownFormatter,
     console,
     print_error,
-    print_info,
     print_verbose,
     print_verbose_timing,
 )
@@ -85,7 +84,7 @@ async def _run_syntax_validation(
     config: HaToolsConfig, formatter: MarkdownFormatter, expand_includes: bool = False
 ) -> int:
     """Run syntax-only validation."""
-    print_info("Running syntax validation...")
+    print_verbose("Running syntax validation...")
     errors = []
     warnings = []
 
@@ -160,7 +159,7 @@ async def _run_full_validation(
     config: HaToolsConfig, formatter: MarkdownFormatter, expand_includes: bool = False
 ) -> int:
     """Run full validation including Home Assistant API."""
-    print_info("Running full validation...")
+    print_verbose("Running full validation...")
 
     # First run syntax validation
     syntax_exit_code = await _run_syntax_validation(config, formatter, expand_includes)
