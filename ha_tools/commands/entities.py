@@ -347,7 +347,7 @@ def _output_markdown_format(
     entities_data: list[dict[str, Any]], include_options: set[str]
 ) -> None:
     """Output entities in markdown format."""
-    formatter = MarkdownFormatter(title="Entity Discovery Results")
+    formatter = MarkdownFormatter(title="Entity Results")
 
     if not entities_data:
         formatter.add_section(
@@ -356,15 +356,21 @@ def _output_markdown_format(
         print(formatter.format())
         return
 
-    # Summary
-    formatter.add_section(
-        "📊 Summary",
-        f"Found **{len(entities_data)}** entities"
-        f"{' with history data' if 'history' in include_options else ''}"
-        f"{' with current state' if 'state' in include_options else ''}"
-        f"{' with relations' if 'relations' in include_options else ''}"
-        f"{' with attributes' if 'attributes' in include_options else ''}",
-    )
+    # Summary - build list of included data types
+    included = []
+    if "history" in include_options:
+        included.append("history data")
+    if "state" in include_options:
+        included.append("current state")
+    if "relations" in include_options:
+        included.append("relations")
+    if "attributes" in include_options:
+        included.append("attributes")
+
+    summary = f"Found **{len(entities_data)}** entities"
+    if included:
+        summary += f" with {', '.join(included)}"
+    formatter.add_section("Summary", summary)
 
     # Entity table
     headers = ["Entity ID", "Friendly Name", "Domain", "Device Class", "Unit"]
@@ -392,7 +398,7 @@ def _output_markdown_format(
 
     # Detailed sections if requested
     if include_options:
-        formatter.add_section("🔍 Detailed Information", "")
+        formatter.add_section("Detailed Information", "")
 
         for entity in entities_data[:10]:  # Limit detailed output to first 10
             entity_id = entity["entity_id"]
@@ -460,7 +466,8 @@ def _output_markdown_format(
 
         if len(entities_data) > 10:
             formatter.add_section(
-                "", f"... and {len(entities_data) - 10} more entities"
+                "",
+                f"*Showing 10 of {len(entities_data)}. Use --limit for more.*",
             )
 
     print(formatter.format())

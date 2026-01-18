@@ -540,22 +540,25 @@ async def _output_errors(
 
 def _output_markdown_format(errors_data: dict[str, Any], correlation: bool) -> None:
     """Output errors analysis in markdown format."""
-    formatter = MarkdownFormatter(title="Error Analysis Results")
+    formatter = MarkdownFormatter(title="Log Results")
 
     # Summary
-    total_errors = len(errors_data["api_errors"]) + len(errors_data["log_errors"])
+    api_count = len(errors_data["api_errors"])
+    log_count = len(errors_data["log_errors"])
+    total_errors = api_count + log_count
+
+    parts = [f"{api_count} runtime", f"{log_count} from logs"]
+    if errors_data["correlations"]:
+        parts.append(f"{len(errors_data['correlations'])} correlations")
 
     formatter.add_section(
-        "📊 Summary",
-        f"Total errors found: **{total_errors}**\n"
-        f"- Current runtime errors: {len(errors_data['api_errors'])}\n"
-        f"- Log file errors: {len(errors_data['log_errors'])}\n"
-        f"- Correlations found: {len(errors_data['correlations'])}",
+        "Summary",
+        f"Found **{total_errors}** errors ({', '.join(parts)})",
     )
 
     # Current runtime errors
     if errors_data["api_errors"]:
-        formatter.add_section("🚨 Current Runtime Errors", "")
+        formatter.add_section("Current Runtime Errors", "")
         for i, error in enumerate(errors_data["api_errors"][:10], 1):
             timestamp = format_timestamp(error.get("timestamp"))
             source = error.get("source", "Unknown")
@@ -591,13 +594,14 @@ def _output_markdown_format(errors_data: dict[str, Any], correlation: bool) -> N
             )
         if len(errors_data["api_errors"]) > 10:
             formatter.add_section(
-                "", f"... and {len(errors_data['api_errors']) - 10} more errors"
+                "",
+                f"*Showing 10 of {len(errors_data['api_errors'])}. Use --limit for more.*",
             )
 
     # Log file errors
     if errors_data["log_errors"]:
-        formatter.add_section("📋 Log File Errors", "")
-        for i, error in enumerate(errors_data["log_errors"][:15], 1):
+        formatter.add_section("Log File Errors", "")
+        for i, error in enumerate(errors_data["log_errors"][:10], 1):
             timestamp = format_timestamp(error.get("timestamp"))
             source = error.get("source", "Unknown")
             message = error.get("message", "No message")[:100]
@@ -607,22 +611,20 @@ def _output_markdown_format(errors_data: dict[str, Any], correlation: bool) -> N
                 f"**Message:** {message}\n"
                 f"**Context:** {' | '.join(error.get('context', [])[:3])}",
             )
-        if len(errors_data["log_errors"]) > 15:
+        if len(errors_data["log_errors"]) > 10:
             formatter.add_section(
-                "", f"... and {len(errors_data['log_errors']) - 15} more errors"
+                "",
+                f"*Showing 10 of {len(errors_data['log_errors'])}. Use --limit for more.*",
             )
 
     # Correlation analysis
     if correlation and errors_data["correlations"]:
-        formatter.add_section("🔗 Correlation Analysis", "")
+        formatter.add_section("Correlation Analysis", "")
         for corr in errors_data["correlations"]:
             strength = corr.get("correlation_strength", 0)
-            strength_emoji = (
-                "🔴" if strength > 2.0 else "🟡" if strength > 1.0 else "🟢"
-            )
 
             formatter.add_section(
-                f"{strength_emoji} Entity: {corr.get('entity_name', 'Unknown')}",
+                f"Entity: {corr.get('entity_name', 'Unknown')}",
                 f"**Error Time:** {format_timestamp(corr['error_timestamp'])}\n"
                 f"**Entity ID:** `{corr['entity_id']}`\n"
                 f"**Correlation Strength:** {strength:.1f}/3.0\n"
@@ -632,8 +634,8 @@ def _output_markdown_format(errors_data: dict[str, Any], correlation: bool) -> N
 
     if not any([errors_data["api_errors"], errors_data["log_errors"]]):
         formatter.add_section(
-            "✅ No Errors Found",
-            "Great! No errors detected in the specified timeframe.",
+            "No Errors Found",
+            "No errors detected in the specified timeframe.",
         )
 
     print(formatter.format())

@@ -72,7 +72,7 @@ async def _run_validation(syntax_only: bool, expand_includes: bool = False) -> i
         print_error(f"Configuration error: {e}")
         return 3  # Configuration error
 
-    formatter = MarkdownFormatter(title="Configuration Validation")
+    formatter = MarkdownFormatter(title="Validation Results")
 
     if syntax_only:
         return await _run_syntax_validation(config, formatter, expand_includes)
@@ -139,7 +139,7 @@ async def _run_syntax_validation(
                 errors.extend(tpl_errors)
                 warnings.extend(tpl_warnings)
 
-        progress.update(task, description="✓ Syntax validation complete")
+        progress.update(task, description="Syntax validation complete")
 
     # Generate report
     _generate_syntax_report(formatter, errors, warnings)
@@ -182,7 +182,7 @@ async def _run_full_validation(
                 start = time.time()
                 validation_result = await api.validate_config()
                 print_verbose_timing("API validation", (time.time() - start) * 1000)
-                progress.update(task, description="✓ Validation complete")
+                progress.update(task, description="Validation complete")
 
             _generate_semantic_report(formatter, validation_result)
 
@@ -249,12 +249,12 @@ def _generate_syntax_report(
 ) -> None:
     """Generate syntax validation report."""
     if errors:
-        formatter.add_section("❌ Syntax Errors", "")
+        formatter.add_section("Syntax Errors", "")
         formatter.add_list(errors)
         formatter.add_section("", "")
 
     if warnings:
-        formatter.add_section("⚠️ Warnings", "")
+        formatter.add_section("Warnings", "")
         formatter.add_list(warnings)
         formatter.add_section("", "")
 
@@ -262,13 +262,13 @@ def _generate_syntax_report(
     total_issues = len(errors) + len(warnings)
     if total_issues == 0:
         formatter.add_section(
-            "✅ Syntax Validation", "All YAML files passed syntax validation!"
+            "Syntax Validation", "All YAML files passed syntax validation."
         )
     else:
-        status = "FAILED" if errors else "PASSED"
+        status_text = "passed" if not errors else "failed"
         formatter.add_section(
-            "📊 Summary",
-            f"Status: **{status}**\nErrors: {len(errors)}\nWarnings: {len(warnings)}",
+            "Summary",
+            f"Validation **{status_text}** ({len(errors)} errors, {len(warnings)} warnings)",
         )
 
 
@@ -276,19 +276,17 @@ def _generate_semantic_report(
     formatter: MarkdownFormatter, validation_result: dict[str, Any]
 ) -> None:
     """Generate semantic validation report."""
-    formatter.add_section("🔍 Semantic Validation", "")
+    formatter.add_section("Semantic Validation", "")
 
     if validation_result.get("valid", True):
-        formatter.add_section(
-            "✅ Configuration Valid", "Home Assistant configuration is valid!"
-        )
+        formatter.add_section("Result", "Home Assistant configuration is valid.")
     else:
-        formatter.add_section("❌ Configuration Invalid", "")
+        formatter.add_section("Result", "Home Assistant configuration is invalid.")
         errors = validation_result.get("errors", [])
         if errors:
             formatter.add_list(errors)
 
     # Add any additional information from validation result
     if "messages" in validation_result:
-        formatter.add_section("📝 Messages", "")
+        formatter.add_section("Messages", "")
         formatter.add_list(validation_result["messages"])

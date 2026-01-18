@@ -268,7 +268,7 @@ def _output_markdown_format(
     if len(states) > 50:
         formatter.add_section(
             "",
-            f"*... and {len(states) - 50} more records (use --format csv for full data)*",
+            f"*Showing 50 of {len(states)}. Use --limit or --format csv for more.*",
         )
 
     print(formatter.format())

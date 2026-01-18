@@ -155,8 +155,8 @@ class TestValidateCommand:
         _generate_syntax_report(formatter, errors, warnings)
 
         output = formatter.format()
-        assert "✅ Syntax Validation" in output
-        assert "All YAML files passed syntax validation!" in output
+        assert "Syntax Validation" in output
+        assert "All YAML files passed syntax validation." in output
 
     def test_generate_syntax_report_with_errors(self):
         """Test syntax report generation with validation errors."""
@@ -167,12 +167,12 @@ class TestValidateCommand:
         _generate_syntax_report(formatter, errors, warnings)
 
         output = formatter.format()
-        assert "❌ Syntax Errors" in output
-        assert "⚠️ Warnings" in output
-        assert "📊 Summary" in output
-        assert "Status: **FAILED**" in output
-        assert "Errors: 1" in output
-        assert "Warnings: 1" in output
+        assert "Syntax Errors" in output
+        assert "Warnings" in output
+        assert "Summary" in output
+        assert "Validation **failed**" in output
+        assert "1 errors" in output
+        assert "1 warnings" in output
 
     def test_generate_syntax_report_with_warnings_only(self):
         """Test syntax report generation with warnings only."""
@@ -183,9 +183,9 @@ class TestValidateCommand:
         _generate_syntax_report(formatter, errors, warnings)
 
         output = formatter.format()
-        assert "Status: **PASSED**" in output  # Warnings don't cause failure
-        assert "Errors: 0" in output
-        assert "Warnings: 1" in output
+        assert "Validation **passed**" in output  # Warnings don't cause failure
+        assert "0 errors" in output
+        assert "1 warnings" in output
 
     def test_generate_semantic_report_valid(self):
         """Test semantic report generation for valid configuration."""
@@ -199,9 +199,9 @@ class TestValidateCommand:
         _generate_semantic_report(formatter, validation_result)
 
         output = formatter.format()
-        assert "🔍 Semantic Validation" in output
-        assert "✅ Configuration Valid" in output
-        assert "Home Assistant configuration is valid!" in output
+        assert "Semantic Validation" in output
+        assert "Result" in output
+        assert "Home Assistant configuration is valid." in output
 
     def test_generate_semantic_report_invalid(self):
         """Test semantic report generation for invalid configuration."""
@@ -218,7 +218,7 @@ class TestValidateCommand:
         _generate_semantic_report(formatter, validation_result)
 
         output = formatter.format()
-        assert "❌ Configuration Invalid" in output
+        assert "Home Assistant configuration is invalid." in output
         assert "Component 'unknown_platform' not found" in output
         assert "Invalid integration configuration" in output
 
@@ -238,7 +238,7 @@ class TestValidateCommand:
         _generate_semantic_report(formatter, validation_result)
 
         output = formatter.format()
-        assert "📝 Messages" in output
+        assert "Messages" in output
         assert "Component 'sensor' loaded" in output
         assert "Component 'switch' loaded" in output
 

@@ -389,7 +389,7 @@ class TestEntitiesCommand:
 
             mock_print.assert_called_once()
             call_args = mock_print.call_args[0][0]
-            assert "Entity Discovery Results" in call_args
+            assert "Entity Results" in call_args
             assert "sensor.temperature" in call_args
 
     @pytest.mark.asyncio
@@ -503,7 +503,7 @@ class TestEntitiesCommand:
 
             mock_print.assert_called_once()
             call_args = mock_print.call_args[0][0]
-            assert "Entity Discovery Results" in call_args
+            assert "Entity Results" in call_args
             assert "Found **1** entities" in call_args
             assert "sensor.temperature" in call_args
 
@@ -532,7 +532,7 @@ class TestEntitiesCommand:
             mock_print.assert_called_once()
             call_args = mock_print.call_args[0][0]
             assert (
-                "Found **1** entities with history data with current state with relations"
+                "Found **1** entities with history data, current state, relations"
                 in call_args
             )
             assert "Current State" in call_args

@@ -277,7 +277,7 @@ class TestOutputFormats:
         _output_markdown_format(states, "sensor.test", "24h", None)
 
         captured = capsys.readouterr()
-        assert "10 more records" in captured.out
+        assert "Showing 50 of 60" in captured.out
 
 
 @pytest.mark.asyncio
