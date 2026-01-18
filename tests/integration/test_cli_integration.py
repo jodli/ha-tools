@@ -118,7 +118,7 @@ class TestCLIIntegration:
 
             # Test basic entity discovery
             result = await _run_entities_command(
-                search=None, include=None, history=None, limit=100, format="markdown"
+                search=None, include=None, history=None, limit=100
             )
             assert result == 0
 
@@ -128,7 +128,6 @@ class TestCLIIntegration:
                 include="state",
                 history=None,
                 limit=10,
-                format="json",
             )
             assert result == 0
 
@@ -170,7 +169,6 @@ class TestCLIIntegration:
                 entity=None,
                 integration=None,
                 correlation=False,
-                format="markdown",
             )
             assert result == 0
 
@@ -182,7 +180,6 @@ class TestCLIIntegration:
                 entity="temperature",
                 integration=None,
                 correlation=True,
-                format="json",
             )
             assert result == 0
 
@@ -255,7 +252,7 @@ class TestCLIIntegration:
             assert result == 3  # Configuration error
 
             result = await _run_entities_command(
-                search=None, include=None, history=None, limit=None, format="markdown"
+                search=None, include=None, history=None, limit=None
             )
             assert result == 3
 
@@ -266,7 +263,6 @@ class TestCLIIntegration:
                 entity=None,
                 integration=None,
                 correlation=False,
-                format="markdown",
             )
             assert result == 3
 
@@ -322,7 +318,6 @@ class TestCLIIntegration:
                 include="state,history",
                 history="24h",
                 limit=10,
-                format="json",
             )
             assert result == 0
 
@@ -403,7 +398,7 @@ class TestEndToEndWorkflows:
                 mock_registry_class.return_value = mock_registry
 
                 entities_result = await _run_entities_command(
-                    search=None, include=None, history=None, limit=10, format="markdown"
+                    search=None, include=None, history=None, limit=10
                 )
                 assert entities_result == 0
 
@@ -469,7 +464,6 @@ class TestEndToEndWorkflows:
                 include="history",
                 history="24h",
                 limit=20,
-                format="markdown",
             )
             assert entities_result == 0
 
@@ -481,7 +475,6 @@ class TestEndToEndWorkflows:
                 entity="heizung*",
                 integration=None,
                 correlation=True,
-                format="markdown",
             )
             assert logs_result == 0
 
@@ -491,6 +484,5 @@ class TestEndToEndWorkflows:
                 include="relations",
                 history=None,
                 limit=10,
-                format="markdown",
             )
             assert entities_result == 0

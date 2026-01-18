@@ -16,7 +16,6 @@ from ..config import HaToolsConfig
 from ..lib.database import DatabaseManager
 from ..lib.output import (
     MarkdownFormatter,
-    console,
     format_timestamp,
     is_verbose,
     print_error,
@@ -50,9 +49,6 @@ def entities_command(
     limit: int | None = typer.Option(
         100, "--limit", "-l", help="Maximum number of entities to return"
     ),
-    format: str | None = typer.Option(
-        "markdown", "--format", "-f", help="Output format (markdown, json, table)"
-    ),
 ) -> None:
     """
     Discover and analyze Home Assistant entities.
@@ -64,12 +60,9 @@ def entities_command(
         ha-tools entities
         ha-tools entities --search "temp" --include history --history 24h
         ha-tools entities --include state,relations
-        ha-tools entities --search "sensor" --format json
     """
     try:
-        exit_code = asyncio.run(
-            _run_entities_command(search, include, history, limit, format or "markdown")
-        )
+        exit_code = asyncio.run(_run_entities_command(search, include, history, limit))
         sys.exit(exit_code)
     except KeyboardInterrupt:
         print_error("Entity discovery cancelled")
@@ -84,7 +77,6 @@ async def _run_entities_command(
     include: str | None,
     history: str | None,
     limit: int | None,
-    format: str,
 ) -> int:
     """Run the entities discovery command."""
     try:
@@ -126,7 +118,7 @@ async def _run_entities_command(
             print_verbose_timing("Entity discovery", (time.time() - start) * 1000)
 
             # Format and output results
-            await _output_results(entities_data, format, include_options)
+            _output_markdown_format(entities_data, include_options)
 
     return 0
 
@@ -288,59 +280,6 @@ async def _get_entities(
                     break
 
     return entities_data
-
-
-async def _output_results(
-    entities_data: list[dict[str, Any]], format: str, include_options: set[str]
-) -> None:
-    """Output entities data in specified format."""
-    if format == "json":
-        from ..lib.output import output_json
-
-        print(output_json(entities_data))
-    elif format == "table":
-        _output_table_format(entities_data, include_options)
-    else:  # markdown (default)
-        _output_markdown_format(entities_data, include_options)
-
-
-def _output_table_format(
-    entities_data: list[dict[str, Any]], include_options: set[str]
-) -> None:
-    """Output entities in table format."""
-    if not entities_data:
-        print("No entities found.")
-        return
-
-    # Prepare headers
-    headers = ["Entity ID", "Friendly Name", "Domain", "State"]
-    if "history" in include_options:
-        headers.append("History Count")
-
-    # Prepare rows
-    rows = []
-    for entity in entities_data:
-        row = [
-            entity["entity_id"],
-            entity["friendly_name"] or "N/A",
-            entity["domain"],
-            entity.get("current_state", "N/A"),
-        ]
-        if "history" in include_options:
-            row.append(str(entity.get("history_count", 0)))
-        rows.append(row)
-
-    # Use rich table for formatting
-    from rich.table import Table
-
-    table = Table(title="Home Assistant Entities")
-    for header in headers:
-        table.add_column(header)
-
-    for row in rows:
-        table.add_row(*row)
-
-    console.print(table)
 
 
 def _output_markdown_format(

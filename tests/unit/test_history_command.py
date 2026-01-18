@@ -8,7 +8,6 @@ import pytest
 from ha_tools.commands.history import (
     _compute_statistics,
     _output_csv_format,
-    _output_json_format,
     _output_markdown_format,
     _run_history_command,
 )
@@ -170,34 +169,6 @@ class TestOutputFormats:
         # Entity-specific attributes should be in headers
         assert "attr_state_class" in headers
         assert "attr_last_reset" in headers
-
-    def test_json_output_structure(self, capsys):
-        """Test JSON output has correct structure."""
-        states = [{"state": "20.0", "last_updated": "2024-01-01T12:00:00"}]
-        stats_data = {"numeric": True, "min": 20.0, "max": 20.0, "avg": 20.0}
-
-        _output_json_format(states, "sensor.test", "24h", stats_data)
-
-        captured = capsys.readouterr()
-        output = json.loads(captured.out)
-
-        assert output["entity_id"] == "sensor.test"
-        assert output["timeframe"] == "24h"
-        assert output["count"] == 1
-        assert "states" in output
-        assert "statistics" in output
-
-    def test_json_output_without_stats(self, capsys):
-        """Test JSON output without statistics."""
-        states = [{"state": "20.0", "last_updated": "2024-01-01T12:00:00"}]
-
-        _output_json_format(states, "sensor.test", "24h", None)
-
-        captured = capsys.readouterr()
-        output = json.loads(captured.out)
-
-        assert output["entity_id"] == "sensor.test"
-        assert "statistics" not in output
 
     def test_markdown_output_basic(self, capsys):
         """Test markdown output basic structure."""

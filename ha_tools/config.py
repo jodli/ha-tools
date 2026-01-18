@@ -79,7 +79,7 @@ class HaToolsConfig(BaseSettings):
         default="/config", description="Path to Home Assistant configuration directory"
     )
     output_format: str = Field(
-        default="markdown", description="Output format (markdown, json, table)"
+        default="markdown", description="Output format (markdown only, csv for history)"
     )
     verbose: bool = Field(default=False, description="Enable verbose logging")
 

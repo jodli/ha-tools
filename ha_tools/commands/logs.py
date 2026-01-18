@@ -66,9 +66,6 @@ def logs_command(
     correlation: bool = typer.Option(
         False, "--correlation", help="Include entity state correlation analysis"
     ),
-    format: str | None = typer.Option(
-        "markdown", "--format", "-f", help="Output format (markdown, json)"
-    ),
 ) -> None:
     """
     Analyze Home Assistant logs.
@@ -91,7 +88,6 @@ def logs_command(
                 entity,
                 integration,
                 correlation,
-                format or "markdown",
             )
         )
         sys.exit(exit_code)
@@ -110,7 +106,6 @@ async def _run_logs_command(
     entity: str | None,
     integration: str | None,
     correlation: bool,
-    format: str,
 ) -> int:
     """Run the logs analysis command."""
     try:
@@ -162,7 +157,7 @@ async def _run_logs_command(
             print_verbose_timing("Log collection", (time.time() - start) * 1000)
 
             # Output results
-            await _output_errors(errors_data, format, correlation)
+            _output_markdown_format(errors_data, correlation)
 
     return 0
 
@@ -526,18 +521,6 @@ def _calculate_correlation_strength(
     return min(strength, 3.0)  # Cap at 3.0
 
 
-async def _output_errors(
-    errors_data: dict[str, Any], format: str, correlation: bool
-) -> None:
-    """Output errors analysis in specified format."""
-    if format == "json":
-        from ..lib.output import output_json
-
-        print(output_json(errors_data))
-    else:  # markdown
-        _output_markdown_format(errors_data, correlation)
-
-
 def _output_markdown_format(errors_data: dict[str, Any], correlation: bool) -> None:
     """Output errors analysis in markdown format."""
     formatter = MarkdownFormatter(title="Log Results")
@@ -632,7 +615,7 @@ def _output_markdown_format(errors_data: dict[str, Any], correlation: bool) -> N
                 f"**State Changes:** {len(corr['state_changes'])} states around error time",
             )
 
-    if not any([errors_data["api_errors"], errors_data["log_errors"]]):
+    if not (errors_data["api_errors"] or errors_data["log_errors"]):
         formatter.add_section(
             "No Errors Found",
             "No errors detected in the specified timeframe.",

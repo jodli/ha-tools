@@ -33,7 +33,7 @@ class TestLogsCommand:
             patch("ha_tools.commands.logs.HomeAssistantAPI") as mock_api_class,
             patch("ha_tools.commands.logs.RegistryManager") as mock_registry_class,
             patch("ha_tools.commands.logs._collect_errors") as mock_collect,
-            patch("ha_tools.commands.logs._output_errors") as mock_output,
+            patch("ha_tools.commands.logs._output_markdown_format") as mock_output,
         ):
             # Mock database and API
             mock_db = AsyncMock()
@@ -62,7 +62,6 @@ class TestLogsCommand:
                 entity=None,
                 integration=None,
                 correlation=False,
-                format="markdown",
             )
 
             assert result == 0

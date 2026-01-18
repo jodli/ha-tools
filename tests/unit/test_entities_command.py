@@ -12,8 +12,6 @@ import pytest
 from ha_tools.commands.entities import (
     _get_entities,
     _output_markdown_format,
-    _output_results,
-    _output_table_format,
     _parse_include_options,
 )
 from ha_tools.lib.utils import parse_timeframe
@@ -370,110 +368,6 @@ class TestEntitiesCommand:
         assert entities[0]["history"] == []
         assert entities[0]["history_count"] == 0
         assert entities[0]["history_error"] == "Database Error"
-
-    @pytest.mark.asyncio
-    async def test_output_results_markdown(self):
-        """Test outputting results in markdown format."""
-        entities_data = [
-            {
-                "entity_id": "sensor.temperature",
-                "friendly_name": "Temperature",
-                "domain": "sensor",
-                "device_class": "temperature",
-                "unit_of_measurement": "°C",
-            }
-        ]
-
-        with patch("builtins.print") as mock_print:
-            await _output_results(entities_data, "markdown", set())
-
-            mock_print.assert_called_once()
-            call_args = mock_print.call_args[0][0]
-            assert "Entity Results" in call_args
-            assert "sensor.temperature" in call_args
-
-    @pytest.mark.asyncio
-    async def test_output_results_json(self):
-        """Test outputting results in JSON format."""
-        entities_data = [
-            {
-                "entity_id": "sensor.temperature",
-                "friendly_name": "Temperature",
-                "domain": "sensor",
-            }
-        ]
-
-        with patch("builtins.print") as mock_print:
-            await _output_results(entities_data, "json", set())
-
-            mock_print.assert_called_once()
-            call_args = mock_print.call_args[0][0]
-            # Check that it's valid JSON
-            import json
-
-            parsed = json.loads(call_args)
-            assert len(parsed) == 1
-            assert parsed[0]["entity_id"] == "sensor.temperature"
-
-    @pytest.mark.asyncio
-    async def test_output_results_table(self):
-        """Test outputting results in table format."""
-        entities_data = [
-            {
-                "entity_id": "sensor.temperature",
-                "friendly_name": "Temperature",
-                "domain": "sensor",
-                "current_state": "20.5",
-                "history_count": 5,
-            }
-        ]
-
-        with patch("ha_tools.commands.entities._output_table_format") as mock_table:
-            await _output_results(entities_data, "table", {"state", "history"})
-
-            mock_table.assert_called_once_with(entities_data, {"state", "history"})
-
-    def test_output_table_format_empty(self):
-        """Test table format with no entities."""
-        with patch("builtins.print") as mock_print:
-            _output_table_format([], set())
-            mock_print.assert_called_with("No entities found.")
-
-    def test_output_table_format_basic(self):
-        """Test basic table format output."""
-        entities_data = [
-            {
-                "entity_id": "sensor.temperature",
-                "friendly_name": "Temperature",
-                "domain": "sensor",
-                "current_state": "20.5",
-            }
-        ]
-
-        with patch("rich.console.Console.print") as mock_console_print:
-            _output_table_format(entities_data, set())
-
-            mock_console_print.assert_called_once()
-            # Check that a table object was printed
-            call_args = mock_console_print.call_args[0][0]
-            assert hasattr(call_args, "add_column")  # Rich table object
-
-    def test_output_table_format_with_history(self):
-        """Test table format with history column."""
-        entities_data = [
-            {
-                "entity_id": "sensor.temperature",
-                "friendly_name": "Temperature",
-                "domain": "sensor",
-                "current_state": "20.5",
-                "history_count": 10,
-            }
-        ]
-
-        with patch("rich.console.Console.print") as mock_console_print:
-            _output_table_format(entities_data, {"history"})
-
-            mock_console_print.assert_called_once()
 
     def test_output_markdown_format_empty(self):
         """Test markdown format with no entities."""

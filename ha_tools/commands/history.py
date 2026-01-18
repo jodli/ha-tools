@@ -63,7 +63,7 @@ def history_command(
         help="Include statistics (min/max/avg for numeric, state counts for non-numeric)",
     ),
     format: str = typer.Option(
-        "markdown", "--format", "-f", help="Output format (markdown, json, csv)"
+        "markdown", "--format", "-f", help="Output format (markdown, csv)"
     ),
 ) -> None:
     """
@@ -109,8 +109,8 @@ async def _run_history_command(
         return 2
 
     # Validate format
-    if format not in ("markdown", "json", "csv"):
-        print_error(f"Invalid format '{format}'. Use: markdown, json, csv")
+    if format not in ("markdown", "csv"):
+        print_error(f"Invalid format '{format}'. Use: markdown, csv")
         return 2
 
     # Handle limit=-1 as no limit
@@ -210,9 +210,7 @@ def _output_results(
     stats_data: dict[str, Any] | None,
 ) -> None:
     """Output results in the specified format."""
-    if format == "json":
-        _output_json_format(states, entity_id, timeframe, stats_data)
-    elif format == "csv":
+    if format == "csv":
         _output_csv_format(states)
     else:  # markdown (default)
         _output_markdown_format(states, entity_id, timeframe, stats_data)
@@ -272,28 +270,6 @@ def _output_markdown_format(
         )
 
     print(formatter.format())
-
-
-def _output_json_format(
-    states: list[dict[str, Any]],
-    entity_id: str,
-    timeframe: str,
-    stats_data: dict[str, Any] | None,
-) -> None:
-    """Output states in JSON format."""
-    output = {
-        "entity_id": entity_id,
-        "timeframe": timeframe,
-        "count": len(states),
-        "states": states,
-    }
-
-    if stats_data:
-        output["statistics"] = stats_data
-
-    from ..lib.output import output_json
-
-    print(output_json(output))
 
 
 def _output_csv_format(states: list[dict[str, Any]]) -> None:
