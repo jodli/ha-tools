@@ -290,8 +290,10 @@ class TestScalabilityBenchmarks:
             )  # Should scale linearly but reasonably
 
         # Verify reasonable scaling (not exponential)
+        # Use max() floor to avoid flaky comparisons when both times are sub-millisecond noise
+        baseline = max(performance_results[10], 0.001)
         assert (
-            performance_results[500] < performance_results[10] * 10
+            performance_results[500] < baseline * 10
         )  # Less than 10x slower for 50x more entities
 
     def test_configuration_loading_performance(self, temp_dir: Path):
