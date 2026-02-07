@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import sys
+from datetime import datetime
 from typing import Any
 
 import typer
@@ -24,7 +25,7 @@ from ..lib.output import (
     print_verbose_timing,
     print_warning,
 )
-from ..lib.utils import parse_timeframe
+from ..lib.utils import parse_datetime, parse_timeframe_to_timedelta
 
 # Default Home Assistant attributes to exclude from CSV output
 # These are system attributes that rarely change or contain useful data for analysis
@@ -44,8 +45,8 @@ def history_command(
     entity_id: str = typer.Argument(
         ..., help="Entity ID to analyze history for (e.g., sensor.temperature)"
     ),
-    timeframe: str = typer.Option(
-        "24h",
+    timeframe: str | None = typer.Option(
+        None,
         "--timeframe",
         "-t",
         help="History timeframe: Nm (minutes), Nh (hours), Nd (days), Nw (weeks)",
@@ -65,6 +66,16 @@ def history_command(
     format: str = typer.Option(
         "markdown", "--format", "-f", help="Output format (markdown, csv)"
     ),
+    start: str | None = typer.Option(
+        None,
+        "--start",
+        help="Start datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)",
+    ),
+    end: str | None = typer.Option(
+        None,
+        "--end",
+        help="End datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)",
+    ),
 ) -> None:
     """
     Analyze state history for a single entity.
@@ -76,10 +87,12 @@ def history_command(
         ha-tools history sensor.temperature
         ha-tools history sensor.temperature --timeframe 7d --stats
         ha-tools history switch.light --format csv --limit -1
+        ha-tools history sensor.temperature --start 2026-01-18 -t 24h
+        ha-tools history sensor.temperature --start 2026-01-18 --end 2026-01-19
     """
     try:
         exit_code = asyncio.run(
-            _run_history_command(entity_id, timeframe, limit, stats, format)
+            _run_history_command(entity_id, timeframe, limit, stats, format, start, end)
         )
         sys.exit(exit_code)
     except KeyboardInterrupt:
@@ -91,7 +104,13 @@ def history_command(
 
 
 async def _run_history_command(
-    entity_id: str, timeframe: str, limit: int, stats: bool, format: str
+    entity_id: str,
+    timeframe: str | None,
+    limit: int,
+    stats: bool,
+    format: str,
+    start: str | None = None,
+    end: str | None = None,
 ) -> int:
     """Run the history command."""
     # Load configuration
@@ -101,17 +120,80 @@ async def _run_history_command(
         print_error(f"Configuration error: {e}")
         return 3
 
-    # Parse timeframe
-    try:
-        start_time = parse_timeframe(timeframe)
-    except ValueError as e:
-        print_error(f"Invalid timeframe: {e}")
-        return 2
-
     # Validate format
     if format not in ("markdown", "csv"):
         print_error(f"Invalid format '{format}'. Use: markdown, csv")
         return 2
+
+    # Validate option combinations
+    if end and not start:
+        print_error("--end requires --start")
+        return 2
+
+    if start and end and timeframe:
+        print_error(
+            "--end and --timeframe are mutually exclusive when --start is given"
+        )
+        return 2
+
+    # Parse start/end if provided
+    parsed_start: datetime | None = None
+    parsed_end: datetime | None = None
+
+    if start:
+        try:
+            parsed_start = parse_datetime(start)
+        except ValueError as e:
+            print_error(f"Invalid --start date: {e}")
+            return 2
+
+    if end:
+        try:
+            parsed_end = parse_datetime(end)
+        except ValueError as e:
+            print_error(f"Invalid --end date: {e}")
+            return 2
+
+    # Validate start < end
+    if parsed_start and parsed_end and parsed_start >= parsed_end:
+        print_error("--start must be before --end")
+        return 2
+
+    # Resolve time range
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    time_description: str
+
+    if parsed_start:
+        start_time = parsed_start
+        if parsed_end:
+            # --start + --end
+            end_time = parsed_end
+            time_description = f"from {start} to {end}"
+        elif timeframe:
+            # --start + --timeframe
+            try:
+                delta = parse_timeframe_to_timedelta(timeframe)
+            except ValueError as e:
+                print_error(f"Invalid timeframe: {e}")
+                return 2
+            end_time = parsed_start + delta
+            time_description = f"from {start} ({timeframe})"
+        else:
+            # --start only (to now)
+            end_time = None
+            time_description = f"since {start}"
+    else:
+        # No --start: use relative timeframe (default 24h)
+        effective_timeframe = timeframe or "24h"
+        try:
+            delta = parse_timeframe_to_timedelta(effective_timeframe)
+        except ValueError as e:
+            print_error(f"Invalid timeframe: {e}")
+            return 2
+        start_time = datetime.now() - delta
+        end_time = None
+        time_description = f"in the last {effective_timeframe}"
 
     # Handle limit=-1 as no limit
     query_limit = None if limit == -1 else limit
@@ -127,6 +209,7 @@ async def _run_history_command(
         result = await db.get_entity_states(
             entity_id=entity_id,
             start_time=start_time,
+            end_time=end_time,
             limit=query_limit,
             include_stats=is_verbose(),
         )
@@ -148,7 +231,7 @@ async def _run_history_command(
 
         # Handle empty results
         if not states:
-            print_warning(f"No history found for {entity_id} in the last {timeframe}")
+            print_warning(f"No history found for {entity_id} {time_description}")
             return 0
 
         # Compute statistics if requested
@@ -157,7 +240,7 @@ async def _run_history_command(
             stats_data = _compute_statistics(states)
 
         # Output results
-        _output_results(states, format, entity_id, timeframe, stats_data)
+        _output_results(states, format, entity_id, time_description, stats_data)
 
     return 0
 
@@ -206,29 +289,27 @@ def _output_results(
     states: list[dict[str, Any]],
     format: str,
     entity_id: str,
-    timeframe: str,
+    time_description: str,
     stats_data: dict[str, Any] | None,
 ) -> None:
     """Output results in the specified format."""
     if format == "csv":
         _output_csv_format(states)
     else:  # markdown (default)
-        _output_markdown_format(states, entity_id, timeframe, stats_data)
+        _output_markdown_format(states, entity_id, time_description, stats_data)
 
 
 def _output_markdown_format(
     states: list[dict[str, Any]],
     entity_id: str,
-    timeframe: str,
+    time_description: str,
     stats_data: dict[str, Any] | None,
 ) -> None:
     """Output states in markdown format."""
     formatter = MarkdownFormatter(title=f"History: {entity_id}")
 
     # Summary section
-    summary_lines = [
-        f"Found **{len(states)}** state changes in the last **{timeframe}**"
-    ]
+    summary_lines = [f"Found **{len(states)}** state changes **{time_description}**"]
     formatter.add_section("Summary", "\n".join(summary_lines))
 
     # Statistics section (if requested)

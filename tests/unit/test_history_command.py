@@ -411,3 +411,221 @@ class TestRunHistoryCommand:
                 mock_db.get_entity_states.assert_called_once()
                 call_kwargs = mock_db.get_entity_states.call_args[1]
                 assert call_kwargs["limit"] is None
+
+    async def test_start_with_timeframe(self):
+        """Test --start with --timeframe calculates end from start + timeframe."""
+        mock_db = AsyncMock()
+        mock_db.is_connected = MagicMock(return_value=True)
+        mock_db.get_entity_states.return_value = []
+
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
+            mock_config = MagicMock()
+            mock_config_class.load.return_value = mock_config
+
+            with patch("ha_tools.commands.history.DatabaseManager") as mock_db_class:
+                mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+                mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+
+                await _run_history_command(
+                    entity_id="sensor.test",
+                    timeframe="24h",
+                    limit=100,
+                    stats=False,
+                    format="markdown",
+                    start="2026-01-18",
+                    end=None,
+                )
+
+                mock_db.get_entity_states.assert_called_once()
+                call_kwargs = mock_db.get_entity_states.call_args[1]
+                from datetime import datetime
+
+                assert call_kwargs["start_time"] == datetime(2026, 1, 18, 0, 0, 0)
+                assert call_kwargs["end_time"] == datetime(2026, 1, 19, 0, 0, 0)
+
+    async def test_start_with_end(self):
+        """Test --start with --end passes both to DB."""
+        mock_db = AsyncMock()
+        mock_db.is_connected = MagicMock(return_value=True)
+        mock_db.get_entity_states.return_value = []
+
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
+            mock_config = MagicMock()
+            mock_config_class.load.return_value = mock_config
+
+            with patch("ha_tools.commands.history.DatabaseManager") as mock_db_class:
+                mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+                mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+
+                await _run_history_command(
+                    entity_id="sensor.test",
+                    timeframe=None,
+                    limit=100,
+                    stats=False,
+                    format="markdown",
+                    start="2026-01-18",
+                    end="2026-01-19",
+                )
+
+                mock_db.get_entity_states.assert_called_once()
+                call_kwargs = mock_db.get_entity_states.call_args[1]
+                from datetime import datetime
+
+                assert call_kwargs["start_time"] == datetime(2026, 1, 18, 0, 0, 0)
+                assert call_kwargs["end_time"] == datetime(2026, 1, 19, 0, 0, 0)
+
+    async def test_start_only_no_timeframe(self):
+        """Test --start without --timeframe or --end queries from start to now."""
+        mock_db = AsyncMock()
+        mock_db.is_connected = MagicMock(return_value=True)
+        mock_db.get_entity_states.return_value = []
+
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
+            mock_config = MagicMock()
+            mock_config_class.load.return_value = mock_config
+
+            with patch("ha_tools.commands.history.DatabaseManager") as mock_db_class:
+                mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+                mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+
+                await _run_history_command(
+                    entity_id="sensor.test",
+                    timeframe=None,
+                    limit=100,
+                    stats=False,
+                    format="markdown",
+                    start="2026-01-18",
+                    end=None,
+                )
+
+                mock_db.get_entity_states.assert_called_once()
+                call_kwargs = mock_db.get_entity_states.call_args[1]
+                from datetime import datetime
+
+                assert call_kwargs["start_time"] == datetime(2026, 1, 18, 0, 0, 0)
+                assert call_kwargs["end_time"] is None
+
+    async def test_end_without_start_errors(self):
+        """Test --end without --start returns exit code 2."""
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
+            mock_config = MagicMock()
+            mock_config_class.load.return_value = mock_config
+
+            result = await _run_history_command(
+                entity_id="sensor.test",
+                timeframe=None,
+                limit=100,
+                stats=False,
+                format="markdown",
+                start=None,
+                end="2026-01-19",
+            )
+
+            assert result == 2
+
+    async def test_end_with_explicit_timeframe_errors(self):
+        """Test --start + --end + --timeframe returns exit code 2."""
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
+            mock_config = MagicMock()
+            mock_config_class.load.return_value = mock_config
+
+            result = await _run_history_command(
+                entity_id="sensor.test",
+                timeframe="7d",
+                limit=100,
+                stats=False,
+                format="markdown",
+                start="2026-01-18",
+                end="2026-01-19",
+            )
+
+            assert result == 2
+
+    async def test_start_after_end_errors(self):
+        """Test --start after --end returns exit code 2."""
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
+            mock_config = MagicMock()
+            mock_config_class.load.return_value = mock_config
+
+            result = await _run_history_command(
+                entity_id="sensor.test",
+                timeframe=None,
+                limit=100,
+                stats=False,
+                format="markdown",
+                start="2026-01-19",
+                end="2026-01-18",
+            )
+
+            assert result == 2
+
+    async def test_no_start_no_end_default_timeframe(self):
+        """Test no --start, no --end, no --timeframe uses 24h default."""
+        mock_db = AsyncMock()
+        mock_db.is_connected = MagicMock(return_value=True)
+        mock_db.get_entity_states.return_value = []
+
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
+            mock_config = MagicMock()
+            mock_config_class.load.return_value = mock_config
+
+            with patch("ha_tools.commands.history.DatabaseManager") as mock_db_class:
+                mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+                mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+
+                with patch("ha_tools.commands.history.datetime") as mock_dt:
+                    from datetime import datetime, timedelta
+
+                    fake_now = datetime(2026, 2, 1, 12, 0, 0)
+                    mock_dt.now.return_value = fake_now
+                    mock_dt.strptime = datetime.strptime
+
+                    await _run_history_command(
+                        entity_id="sensor.test",
+                        timeframe=None,
+                        limit=100,
+                        stats=False,
+                        format="markdown",
+                        start=None,
+                        end=None,
+                    )
+
+                    mock_db.get_entity_states.assert_called_once()
+                    call_kwargs = mock_db.get_entity_states.call_args[1]
+                    assert call_kwargs["start_time"] == fake_now - timedelta(hours=24)
+                    assert call_kwargs["end_time"] is None
+
+    async def test_output_message_with_date_range(self, capsys):
+        """Test that output says 'from ... to ...' for date range queries."""
+        mock_db = AsyncMock()
+        mock_db.is_connected = MagicMock(return_value=True)
+        mock_db.get_entity_states.return_value = [
+            {
+                "state": "20.0",
+                "last_updated": "2026-01-18T12:00:00",
+                "last_changed": "2026-01-18T12:00:00",
+            }
+        ]
+
+        with patch("ha_tools.commands.history.HaToolsConfig") as mock_config_class:
+            mock_config = MagicMock()
+            mock_config_class.load.return_value = mock_config
+
+            with patch("ha_tools.commands.history.DatabaseManager") as mock_db_class:
+                mock_db_class.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+                mock_db_class.return_value.__aexit__ = AsyncMock(return_value=None)
+
+                result = await _run_history_command(
+                    entity_id="sensor.test",
+                    timeframe=None,
+                    limit=100,
+                    stats=False,
+                    format="markdown",
+                    start="2026-01-18",
+                    end="2026-01-19",
+                )
+
+                assert result == 0
+                captured = capsys.readouterr()
+                assert "from 2026-01-18" in captured.out
+                assert "to 2026-01-19" in captured.out

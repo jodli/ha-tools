@@ -9,7 +9,11 @@ from unittest.mock import patch
 
 import pytest
 
-from ha_tools.lib.utils import parse_timeframe
+from ha_tools.lib.utils import (
+    parse_datetime,
+    parse_timeframe,
+    parse_timeframe_to_timedelta,
+)
 
 
 class TestParseTimeframe:
@@ -113,3 +117,60 @@ class TestParseTimeframe:
             result = parse_timeframe("365d")
             expected = base_time - timedelta(days=365)
             assert result == expected
+
+
+class TestParseDatetime:
+    """Test datetime string parsing."""
+
+    def test_parse_date_only(self):
+        """Test parsing date-only string returns midnight."""
+        result = parse_datetime("2026-01-18")
+        from datetime import datetime
+
+        assert result == datetime(2026, 1, 18, 0, 0, 0)
+
+    def test_parse_datetime_with_time(self):
+        """Test parsing full datetime string."""
+        result = parse_datetime("2026-01-18T14:30:00")
+        from datetime import datetime
+
+        assert result == datetime(2026, 1, 18, 14, 30, 0)
+
+    def test_parse_datetime_invalid(self):
+        """Test parsing invalid string raises ValueError."""
+        with pytest.raises(ValueError):
+            parse_datetime("bad-date")
+
+    def test_parse_datetime_empty(self):
+        """Test parsing empty string raises ValueError."""
+        with pytest.raises(ValueError):
+            parse_datetime("")
+
+
+class TestParseTimeframeToTimedelta:
+    """Test timeframe to timedelta parsing."""
+
+    def test_hours(self):
+        """Test parsing hours to timedelta."""
+        result = parse_timeframe_to_timedelta("24h")
+        assert result == timedelta(hours=24)
+
+    def test_days(self):
+        """Test parsing days to timedelta."""
+        result = parse_timeframe_to_timedelta("7d")
+        assert result == timedelta(days=7)
+
+    def test_minutes(self):
+        """Test parsing minutes to timedelta."""
+        result = parse_timeframe_to_timedelta("30m")
+        assert result == timedelta(minutes=30)
+
+    def test_weeks(self):
+        """Test parsing weeks to timedelta."""
+        result = parse_timeframe_to_timedelta("2w")
+        assert result == timedelta(weeks=2)
+
+    def test_invalid(self):
+        """Test parsing invalid format raises ValueError."""
+        with pytest.raises(ValueError):
+            parse_timeframe_to_timedelta("24x")

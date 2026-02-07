@@ -5,6 +5,58 @@ Shared utility functions for ha-tools.
 from datetime import datetime, timedelta
 
 
+def _parse_timeframe_to_timedelta(timeframe: str) -> timedelta:
+    """Parse a timeframe string into a timedelta.
+
+    Args:
+        timeframe: String like "24h", "7d", "30m", "2w" (case-insensitive, whitespace-trimmed)
+
+    Returns:
+        timedelta representing the duration
+
+    Raises:
+        ValueError: If timeframe format is invalid
+    """
+    timeframe = timeframe.lower().strip()
+
+    try:
+        if timeframe.endswith("h"):
+            return timedelta(hours=int(timeframe[:-1]))
+        elif timeframe.endswith("d"):
+            return timedelta(days=int(timeframe[:-1]))
+        elif timeframe.endswith("m"):
+            return timedelta(minutes=int(timeframe[:-1]))
+        elif timeframe.endswith("w"):
+            return timedelta(weeks=int(timeframe[:-1]))
+        else:
+            raise ValueError(
+                f"Invalid timeframe format: {timeframe}. Use h (hours), d (days), m (minutes), or w (weeks)."
+            )
+    except ValueError as e:
+        if "Invalid timeframe format" in str(e):
+            raise
+        raise ValueError(
+            f"Invalid timeframe format: {timeframe}. Use h (hours), d (days), m (minutes), or w (weeks)."
+        ) from e
+
+
+def parse_timeframe_to_timedelta(timeframe: str) -> timedelta:
+    """Parse a timeframe string into a timedelta.
+
+    Public API - delegates to _parse_timeframe_to_timedelta.
+
+    Args:
+        timeframe: String like "24h", "7d", "30m", "2w"
+
+    Returns:
+        timedelta representing the duration
+
+    Raises:
+        ValueError: If timeframe format is invalid
+    """
+    return _parse_timeframe_to_timedelta(timeframe)
+
+
 def parse_timeframe(timeframe: str) -> datetime:
     """
     Parse timeframe string into datetime.
@@ -24,28 +76,36 @@ def parse_timeframe(timeframe: str) -> datetime:
     Raises:
         ValueError: If timeframe format is invalid
     """
-    timeframe = timeframe.lower().strip()
+    delta = _parse_timeframe_to_timedelta(timeframe)
+    return datetime.now() - delta
 
-    try:
-        if timeframe.endswith("h"):
-            hours = int(timeframe[:-1])
-            return datetime.now() - timedelta(hours=hours)
-        elif timeframe.endswith("d"):
-            days = int(timeframe[:-1])
-            return datetime.now() - timedelta(days=days)
-        elif timeframe.endswith("m"):
-            minutes = int(timeframe[:-1])
-            return datetime.now() - timedelta(minutes=minutes)
-        elif timeframe.endswith("w"):
-            weeks = int(timeframe[:-1])
-            return datetime.now() - timedelta(weeks=weeks)
-        else:
-            raise ValueError(
-                f"Invalid timeframe format: {timeframe}. Use h (hours), d (days), m (minutes), or w (weeks)."
-            )
-    except ValueError as e:
-        if "Invalid timeframe format" in str(e):
-            raise
-        raise ValueError(
-            f"Invalid timeframe format: {timeframe}. Use h (hours), d (days), m (minutes), or w (weeks)."
-        ) from e
+
+def parse_datetime(date_str: str) -> datetime:
+    """Parse a date or datetime string.
+
+    Accepts:
+        - YYYY-MM-DD (returns midnight)
+        - YYYY-MM-DDTHH:MM:SS
+
+    Args:
+        date_str: Date string to parse
+
+    Returns:
+        datetime object
+
+    Raises:
+        ValueError: If format is invalid
+    """
+    if not date_str:
+        raise ValueError("Empty date string")
+
+    # Try YYYY-MM-DDTHH:MM:SS first
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+
+    raise ValueError(
+        f"Invalid date format: '{date_str}'. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS."
+    )
