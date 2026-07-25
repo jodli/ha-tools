@@ -1,0 +1,9 @@
+{
+  "columns": ["statistic_id", "start", "mean", "min", "max", "sum", "state", "last_reset", "unit_of_measurement"],
+  "rows": [
+    ["sensor.erdgeschoss_energieverbrauch_total", "2025-01-01T00:00:00", null, null, null, 1000.0, null, null, "kWh"],
+    ["sensor.erdgeschoss_energieverbrauch_total", "2025-01-02T00:00:00", null, null, null, 1010.5, null, null, "kWh"],
+    ["sensor.erdgeschoss_energieverbrauch_total", "2025-01-03T00:00:00", null, null, null, 1022.0, null, null, "kWh"],
+    ["sensor.erdgeschoss_energieverbrauch_total", "2025-01-04T00:00:00", null, null, null, 1035.0, null, null, "kWh"]
+  ]
+}

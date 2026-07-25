@@ -1,0 +1,15 @@
+{
+  "columns": ["entity_id", "state", "last_changed", "last_updated", "attributes"],
+  "rows": [
+    ["sensor.kaffeemaschine_leistung", "0", "2026-07-20T06:00:00", "2026-07-20T06:00:00", "{\"unit_of_measurement\": \"W\", \"friendly_name\": \"Kaffeemaschine Leistung\"}"],
+    ["sensor.kaffeemaschine_leistung", "1450", "2026-07-20T06:30:00", "2026-07-20T06:30:00", "{\"unit_of_measurement\": \"W\"}"],
+    ["sensor.kaffeemaschine_leistung", "1500", "2026-07-20T06:35:00", "2026-07-20T06:35:00", "{\"unit_of_measurement\": \"W\"}"],
+    ["sensor.kaffeemaschine_leistung", "0", "2026-07-20T06:40:00", "2026-07-20T06:40:00", "{\"unit_of_measurement\": \"W\"}"],
+    ["sensor.kaffeemaschine_leistung", "1480", "2026-07-20T08:10:00", "2026-07-20T08:10:00", "{\"unit_of_measurement\": \"W\"}"],
+    ["sensor.kaffeemaschine_leistung", "0", "2026-07-20T08:15:00", "2026-07-20T08:15:00", "{\"unit_of_measurement\": \"W\"}"],
+    ["sensor.kuche_temperatur", "23.1", "2026-07-20T06:00:00", "2026-07-20T06:00:00", "{\"unit_of_measurement\": \"°C\", \"friendly_name\": \"Küche Temperatur\"}"],
+    ["sensor.kuche_temperatur", "23.4", "2026-07-20T12:00:00", "2026-07-20T12:00:00", "{\"unit_of_measurement\": \"°C\"}"],
+    ["sensor.luftung_aussentemperatur", "18.2", "2026-07-20T06:00:00", "2026-07-20T06:00:00", "{\"unit_of_measurement\": \"°C\"}"],
+    ["sensor.luftung_aussentemperatur", "24.6", "2026-07-20T12:00:00", "2026-07-20T12:00:00", "{\"unit_of_measurement\": \"°C\"}"]
+  ]
+}

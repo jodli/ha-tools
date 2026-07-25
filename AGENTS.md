@@ -1,108 +1,41 @@
-# Agent Context & Operating Protocols
+# Agent Context: ha-tools
 
-> [!IMPORTANT]
-> **SYSTEM INJECTION**: You are an expert Home Assistant Administrator Agent operating within the `ha-tools` environment. Your primary interface to the system is the `ha-tools` CLI, which is optimized for your consumption.
+`ha-tools` is a **Python library** (not a CLI) that loads Home Assistant
+recorder data into pandas DataFrames for Jupyter/notebook analysis. It retrieves
+raw rows only — no aggregation.
 
-## 1. Your Role & Capabilities
+For live Home Assistant operations (validation, entity search, logs, control),
+use the **ha-mcp** MCP server, not this library. This library is for bulk data
+access off the MariaDB recorder.
 
-You are responsible for managing, validating, and debugging a Home Assistant instance. You have access to a high-performance CLI toolset (`ha-tools`) that provides you with:
-- **Instant Validation**: Check configuration syntax and semantics.
-- **Deep Insight**: Access entity history, relationships, and state via direct database queries.
-- **Diagnostics**: Correlate runtime errors with entity behavior.
+## Public API
 
-**Core Philosophy**:
-1.  **Tool-First**: Always use `ha-tools` before attempting manual file parsing or raw API calls.
-2.  **Performance-Aware**: Prefer database/filesystem operations (fast) over full API calls (slow).
-3.  **Safety-Critical**: Always validate changes before considering a task complete.
+```python
+from ha_tools import load_states, load_statistics, query
 
-## 2. Tooling Reference
+load_states(entity, start=None, end=None, timeframe="24h", limit=None)            # raw states
+load_statistics(entity, since=None, start=None, end=None, timeframe=None, limit=None)  # raw stats rows
+query(sql, params=None)                                                           # escape hatch
+```
 
-You have four primary commands. Use them as your eyes and ears.
+`entity` is a string or list; `*` wildcards expand to SQL `LIKE`. Configure the
+DB once in `~/.ha-tools-config.yaml` (the `database` block).
 
-### `ha-tools validate`
-*Your safety net. Run this often.*
-- `ha-tools validate --syntax-only`: **RUN THIS FIRST**. Instant check for YAML syntax errors.
-- `ha-tools validate`: Full semantic validation (takes 2-3 mins). Run this before final sign-off.
+## When working in this repo
 
-### `ha-tools entities`
-*Your knowledge base. Use this to explore.*
-- `ha-tools entities`: List all entities.
-- `ha-tools entities --search "pattern"`: Find specific entities (substring matching).
-- `ha-tools entities --include history --history 24h`: **CRITICAL** for debugging. Shows what happened recently.
-- `ha-tools entities --include relations`: Shows how entities connect (areas, groups).
+- **Schema knowledge lives in `ha_tools/db.py`.** `states` joins `states_meta`
+  on `s.metadata_id = sm.metadata_id` and `state_attributes` (`shared_attrs` is a
+  JSON blob). `statistics` joins `statistics_meta` on `s.metadata_id = m.id`
+  (note: `id`, not `metadata_id`) with modern columns `start_ts` / `last_reset_ts`.
+- **Connection seam:** `ha_tools.db._connection_factory` — tests override it with
+  a `FakeConnection` (see `tests/conftest.py`). Never call real pymysql from tests.
+- **Examples are tests:** each `examples/*.py` exposes `run()` and is executed by
+  `tests/integration/test_examples.py` against the fake DB. To document a new use
+  case, add an example and a matching assertion.
+- **Verify:** `uv run pytest` (hermetic), `uv run ruff check .`.
 
-### `ha-tools errors`
-*Your diagnostic scanner.*
-- `ha-tools errors --current`: Show errors from the current session.
-- `ha-tools errors --entity "pattern" --log 24h`: Find errors related to a specific entity over time.
+## Operating protocol
 
-### `ha-tools history`
-*Deep-dive into a single entity's past.*
-- `ha-tools history sensor.temperature`: Last 24h of state changes.
-- `ha-tools history sensor.temperature --timeframe 7d`: Custom timeframe.
-- `ha-tools history sensor.temperature --stats`: Include min/max/avg statistics.
-- `ha-tools history switch.light --stats`: State change counts for binary entities.
-- `ha-tools history sensor.temperature --format csv -l -1`: Full CSV export.
-
-### Global Options
-- `--verbose`: Enable detailed output (timing, API calls, debug info). Use when debugging performance or connectivity issues.
-
-## 3. Standard Operating Protocols
-
-### Protocol A: Making Configuration Changes
-*Follow this sequence strictly when modifying YAML files.*
-
-1.  **Plan**: Read the files you intend to change.
-2.  **Edit**: Apply your changes to the configuration files.
-3.  **Verify Syntax**:
-    ```bash
-    ha-tools validate --syntax-only
-    ```
-    *If this fails, fix the syntax immediately. Do not proceed.*
-4.  **Impact Analysis**:
-    ```bash
-    ha-tools entities --search "modified_entity_name" --include state  # substring match
-    ```
-    *Verify the entity is in the expected state (if applicable).*
-5.  **Final Validation**:
-    ```bash
-    ha-tools validate
-    ```
-    *Only if syntax check passed and you are ready to commit.*
-
-### Protocol B: Debugging Issues
-*When the user reports "Something is not working".*
-
-1.  **Gather History** (use `--verbose` for timing details):
-    ```bash
-    ha-tools entities --search "problematic_entity" --include history --history 24h --verbose
-    ```
-    *Look for anomalies in the state history.*
-2.  **Check Errors**:
-    ```bash
-    ha-tools errors --entity "problematic_entity" --log 24h
-    ```
-    *Correlate timestamps of errors with state changes found in step 1.*
-3.  **Analyze Dependencies**:
-    ```bash
-    ha-tools entities --include relations --search "problematic_entity"
-    ```
-    *Check if related entities (automations, scripts) are also failing.*
-
-**Timeframe formats**: `Nh` (hours), `Nd` (days), `Nm` (minutes), `Nw` (weeks)
-
-## 4. Best Practices
-
-- **Output Interpretation**: The CLI outputs Markdown. Read the tables and code blocks carefully.
-- **Database vs API**: The CLI automatically chooses the fastest source. Trust it.
-- **Long-Term Trends**: If you need to see if a value is "normal", check long-term history:
-    ```bash
-    ha-tools entities --search "sensor.name" --include history --history 7d
-    ```
-
-## 5. Emergency Procedures
-
-If `ha-tools` commands fail or return unexpected errors:
-1.  **Fallback**: You may read files directly using standard file reading tools.
-2.  **Report**: Inform the user that the toolset is unavailable and you are proceeding manually.
-3.  **Check Connection**: Run `ha-tools test-connection` to see if the backend is down.
+1. Read `ha_tools/db.py` before touching SQL.
+2. If you change the SQL, update the assertions in `tests/integration/test_examples.py`.
+3. Keep `uv run pytest` green.
